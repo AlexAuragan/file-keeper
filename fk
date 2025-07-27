@@ -1,0 +1,115 @@
+#!/bin/bash
+
+DB="$HOME/.file_keeper"
+
+install_fk() {
+  local target="/usr/local/bin/fk"
+  local script_path="$(realpath "$0")"
+
+  if [ ! -w "$(dirname "$target")" ]; then
+    echo "Root permissions required to install to $target"
+    sudo cp "$script_path" "$target" && sudo chmod +x "$target" &&
+      echo "Installed fk to $target"
+  else
+    cp "$script_path" "$target" && chmod +x "$target" &&
+      echo "Installed fk to $target"
+  fi
+}
+
+add_file() {
+  local file="$1"
+  if [ -z "$file" ]; then
+    echo "Usage: fk --add <path>"
+    return
+  fi
+  grep -qxF "$file" "$DB" 2>/dev/null || echo "$file" >>"$DB"
+  echo "Added: $file"
+}
+
+list_files() {
+  if [ ! -s "$DB" ]; then
+    echo "No files tracked yet."
+    exit 0
+  fi
+
+  local config_files=()
+  local service_files=()
+  while IFS= read -r line; do
+    if [[ "$line" == *"/systemd/"* ]]; then
+      service_files+=("$line")
+    else
+      config_files+=("$line")
+    fi
+  done <"$DB"
+
+  echo "Config files:"
+  local i=1
+  for f in "${config_files[@]}"; do
+    echo "  $i) $f"
+    ((i++))
+  done
+
+  echo "Service files:"
+  local letter="a"
+  for s in "${service_files[@]}"; do
+    echo "  $letter) $s"
+    letter=$(echo "$letter" | tr "0-9a-z" "1-9a-z_") # simple next letter
+    letter=$(echo "$letter" | tr "_z" "aa")          # wrap letters (a, b, c...)
+  done
+
+  echo -n "Select (e.g., 1, ar, ai, aj): "
+  read -r choice
+
+  handle_choice "$choice" config_files[@] service_files[@]
+}
+
+handle_choice() {
+  local choice="$1"
+  shift
+  local configs=("${!1}")
+  shift
+  local services=("${!1}")
+
+  if [[ "$choice" =~ ^[0-9]+ ]]; then
+    # Config files
+    local num="${choice//[^0-9]/}"
+    local idx=$((num - 1))
+    [[ $idx -ge 0 && $idx -lt ${#configs[@]} ]] || {
+      echo "Invalid number"
+      return
+    }
+    nano "${configs[$idx]}"
+
+  elif [[ "$choice" =~ ^[a-z] ]]; then
+    # Service files
+    local action="${choice:1}" # r, i, j
+    local letter="${choice:0:1}"
+    local idx=$(($(printf '%d' "'$letter") - 97)) # 'a' -> 0, 'b' -> 1
+    [[ $idx -ge 0 && $idx -lt ${#services[@]} ]] || {
+      echo "Invalid letter"
+      return
+    }
+
+    local svc_file="${services[$idx]}"
+    local svc_name=$(basename "$svc_file" .service)
+
+    case "$action" in
+    "") nano "$svc_file" ;;
+    "r") systemctl restart "$svc_name" ;;
+    "s") systemctl start "$svc_name" ;;
+    "i") systemctl status "$svc_name" ;;
+    "j") journalctl -u "$svc_name" ;;
+    "jf") journalctl -u "$svc_name" -f ;;
+    *) echo "Unknown action: $action" ;;
+    esac
+  else
+    echo "Invalid input"
+  fi
+}
+
+case "$1" in
+--add) add_file "$2" ;;
+--init) install_fk ;;
+"") list_files ;;
+*) echo "Usage: fk [--add <path>] [--init]" ;;
+esac
