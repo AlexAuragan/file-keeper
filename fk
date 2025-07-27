@@ -111,6 +111,7 @@ list_files() {
   echo -n "Select (e.g., 1, ar, ai, aj): "
   read -r choice
   SELECTED_PATH=$(get_path_from_choice "$choice" config_files[@] service_files[@])
+  handle_choice "$choice" config_files[@] service_files[@]
 }
 
 get_path_from_choice() {
@@ -213,6 +214,11 @@ case "$1" in
 --update) update_fk ;;
 --edit) edit_file ;;
 --delete) delete_file ;;
-"") list_files ;;
+"")
+  # build the lists and then launch the menu+action in one go
+  list_files # this will print and read into SELECTED_PATH, but we also need to capture choice
+  # Unfortunately list_files currently reads choice internally, so just call:
+  handle_choice "$choice" config_files[@] service_files[@]
+  ;;
 *) echo "Usage: fk [--add <path> <description>] [--init] [--update] [--edit] [--delete]" ;;
 esac
