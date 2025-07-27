@@ -144,7 +144,8 @@ edit_file() {
   echo -n "Enter new description for '$SELECTED_PATH': "
   read -r new_desc
 
-  sed -i "s|^$SELECTED_PATH|.*|$SELECTED_PATH|$new_desc|" "$DB"
+  # Update or add description, even if empty
+  sed -i "s|^$SELECTED_PATH\(|.*\)\?$|$SELECTED_PATH|$new_desc|" "$DB"
   echo "Updated description for $SELECTED_PATH"
 }
 
