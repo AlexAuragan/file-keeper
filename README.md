@@ -7,10 +7,8 @@ This tool was made only to keep track of max 10 files, but it is more than enoug
 
 # How to use
 ```
-git clone git@github.com:AlexAuragan/file-keeper.git
+git clone https://github.com/AlexAuragan/file-keeper.git
 cd file-keeper
 chmod +x fk
 ./fk --init
 ```
-``
-``
