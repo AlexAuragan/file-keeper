@@ -19,7 +19,6 @@ install_fk() {
       echo "Installed fk to $target"
   fi
 
-  # Clean up .git folder if present
   if [ -d "$repo_root/.git" ]; then
     echo "Removing Git folder from $repo_root..."
     rm -rf "$repo_root/.git"
@@ -111,8 +110,49 @@ list_files() {
 
   echo -n "Select (e.g., 1, ar, ai, aj): "
   read -r choice
+  SELECTED_PATH=$(get_path_from_choice "$choice" config_files[@] service_files[@])
+}
 
-  handle_choice "$choice" config_files[@] service_files[@]
+get_path_from_choice() {
+  local choice="$1"
+  shift
+  local configs=("${!1}")
+  shift
+  local services=("${!1}")
+
+  if [[ "$choice" =~ ^[0-9]+ ]]; then
+    local idx=$((choice - 1))
+    [[ $idx -ge 0 && $idx -lt ${#configs[@]} ]] || {
+      echo "Invalid number"
+      return
+    }
+    echo "${configs[$idx]%%|*}"
+  elif [[ "$choice" =~ ^[a-z] ]]; then
+    local letter="${choice:0:1}"
+    local idx=$(($(printf '%d' "'$letter") - 97))
+    [[ $idx -ge 0 && $idx -lt ${#services[@]} ]] || {
+      echo "Invalid letter"
+      return
+    }
+    echo "${services[$idx]%%|*}"
+  fi
+}
+
+edit_file() {
+  list_files
+  [ -z "$SELECTED_PATH" ] && return
+  echo -n "Enter new description for '$SELECTED_PATH': "
+  read -r new_desc
+
+  sed -i "s|^$SELECTED_PATH|.*|$SELECTED_PATH|$new_desc|" "$DB"
+  echo "Updated description for $SELECTED_PATH"
+}
+
+delete_file() {
+  list_files
+  [ -z "$SELECTED_PATH" ] && return
+  grep -v "^$SELECTED_PATH|" "$DB" >"$DB.tmp" && mv "$DB.tmp" "$DB"
+  echo "Deleted $SELECTED_PATH from tracking"
 }
 
 handle_choice() {
@@ -123,8 +163,7 @@ handle_choice() {
   local services=("${!1}")
 
   if [[ "$choice" =~ ^[0-9]+ ]]; then
-    local num="${choice//[^0-9]/}"
-    local idx=$((num - 1))
+    local idx=$((choice - 1))
     [[ $idx -ge 0 && $idx -lt ${#configs[@]} ]] || {
       echo "Invalid number"
       return
@@ -165,6 +204,8 @@ case "$1" in
   ;;
 --init) install_fk ;;
 --update) update_fk ;;
+--edit) edit_file ;;
+--delete) delete_file ;;
 "") list_files ;;
-*) echo "Usage: fk [--add <path> <description>] [--init] [--update]" ;;
+*) echo "Usage: fk [--add <path> <description>] [--init] [--update] [--edit] [--delete]" ;;
 esac
