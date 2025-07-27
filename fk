@@ -144,8 +144,14 @@ edit_file() {
   echo -n "Enter new description for '$SELECTED_PATH': "
   read -r new_desc
 
-  # Update or add description, even if empty
-  sed -i "s|^$SELECTED_PATH\(|.*\)\?$|$SELECTED_PATH|$new_desc|" "$DB"
+  awk -F'|' -v file="$SELECTED_PATH" -v desc="$new_desc" '{
+    if ($1 == file) {
+      print file "|" desc
+    } else {
+      print $0
+    }
+  }' "$DB" >"$DB.tmp" && mv "$DB.tmp" "$DB"
+
   echo "Updated description for $SELECTED_PATH"
 }
 
