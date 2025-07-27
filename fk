@@ -1,6 +1,7 @@
 #!/bin/bash
 
 DB="$HOME/.file_keeper"
+REPO_URL="https://github.com/AlexAuragan/file-keeper.git"
 
 install_fk() {
   local target="/usr/local/bin/fk"
@@ -16,14 +17,49 @@ install_fk() {
   fi
 }
 
+update_fk() {
+  local tmp_dir
+  tmp_dir=$(mktemp -d)
+
+  echo "Cloning File Keeper repository..."
+  git clone --depth 1 "$REPO_URL" "$tmp_dir" || {
+    echo "Failed to clone repository."
+    return 1
+  }
+
+  if [ -f "$tmp_dir/fk" ]; then
+    echo "Installing new version..."
+    (cd "$tmp_dir" && ./fk --init)
+  elif [ -f "$tmp_dir/fk.sh" ]; then
+    echo "Installing new version..."
+    (cd "$tmp_dir" && ./fk.sh --init)
+  else
+    echo "Could not find fk script in repository."
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  rm -rf "$tmp_dir"
+  echo "Update completed!"
+}
+
 add_file() {
   local file="$1"
-  if [ -z "$file" ]; then
-    echo "Usage: fk --add <path>"
+  shift
+  local description="$*"
+
+  if [ -z "$file" ] || [ -z "$description" ]; then
+    echo "Usage: fk --add <path> <description>"
     return
   fi
-  grep -qxF "$file" "$DB" 2>/dev/null || echo "$file" >>"$DB"
-  echo "Added: $file"
+
+  grep -q "^$file|" "$DB" 2>/dev/null && {
+    echo "File already tracked: $file"
+    return
+  }
+
+  echo "$file|$description" >>"$DB"
+  echo "Added: $file [$description]"
 }
 
 list_files() {
@@ -35,26 +71,33 @@ list_files() {
   local config_files=()
   local service_files=()
   while IFS= read -r line; do
-    if [[ "$line" == *"/systemd/"* ]]; then
-      service_files+=("$line")
+    local file="${line%%|*}"
+    local desc="${line#*|}"
+    [ "$file" = "$desc" ] && desc=""
+    if [[ "$file" == *"/systemd/"* ]]; then
+      service_files+=("$file|$desc")
     else
-      config_files+=("$line")
+      config_files+=("$file|$desc")
     fi
   done <"$DB"
 
   echo "Config files:"
   local i=1
-  for f in "${config_files[@]}"; do
-    echo "  $i) $f"
+  for entry in "${config_files[@]}"; do
+    local path="${entry%%|*}"
+    local desc="${entry#*|}"
+    [ -n "$desc" ] && echo "  $i) $path [$desc]" || echo "  $i) $path"
     ((i++))
   done
 
   echo "Service files:"
   local letter="a"
-  for s in "${service_files[@]}"; do
-    echo "  $letter) $s"
-    letter=$(echo "$letter" | tr "0-9a-z" "1-9a-z_") # simple next letter
-    letter=$(echo "$letter" | tr "_z" "aa")          # wrap letters (a, b, c...)
+  for entry in "${service_files[@]}"; do
+    local path="${entry%%|*}"
+    local desc="${entry#*|}"
+    [ -n "$desc" ] && echo "  $letter) $path [$desc]" || echo "  $letter) $path"
+    letter=$(echo "$letter" | tr "0-9a-z" "1-9a-z_")
+    letter=$(echo "$letter" | tr "_z" "aa")
   done
 
   echo -n "Select (e.g., 1, ar, ai, aj): "
@@ -71,26 +114,25 @@ handle_choice() {
   local services=("${!1}")
 
   if [[ "$choice" =~ ^[0-9]+ ]]; then
-    # Config files
     local num="${choice//[^0-9]/}"
     local idx=$((num - 1))
     [[ $idx -ge 0 && $idx -lt ${#configs[@]} ]] || {
       echo "Invalid number"
       return
     }
-    nano "${configs[$idx]}"
+    local path="${configs[$idx]%%|*}"
+    nano "$path"
 
   elif [[ "$choice" =~ ^[a-z] ]]; then
-    # Service files
-    local action="${choice:1}" # r, i, j
     local letter="${choice:0:1}"
-    local idx=$(($(printf '%d' "'$letter") - 97)) # 'a' -> 0, 'b' -> 1
+    local action="${choice:1}"
+    local idx=$(($(printf '%d' "'$letter") - 97))
     [[ $idx -ge 0 && $idx -lt ${#services[@]} ]] || {
       echo "Invalid letter"
       return
     }
 
-    local svc_file="${services[$idx]}"
+    local svc_file="${services[$idx]%%|*}"
     local svc_name=$(basename "$svc_file" .service)
 
     case "$action" in
@@ -108,8 +150,12 @@ handle_choice() {
 }
 
 case "$1" in
---add) add_file "$2" ;;
+--add)
+  shift
+  add_file "$@"
+  ;;
 --init) install_fk ;;
+--update) update_fk ;;
 "") list_files ;;
-*) echo "Usage: fk [--add <path>] [--init]" ;;
+*) echo "Usage: fk [--add <path> <description>] [--init] [--update]" ;;
 esac
