@@ -3,18 +3,30 @@
 DB="$HOME/.file_keeper"
 REPO_URL="https://github.com/AlexAuragan/file-keeper.git"
 
+
 install_fk() {
   local target="/usr/local/bin/fk"
   local script_path="$(realpath "$0")"
+  local repo_root
+
+  repo_root="$(dirname "$script_path")"
 
   if [ ! -w "$(dirname "$target")" ]; then
     echo "Root permissions required to install to $target"
-    sudo cp "$script_path" "$target" && sudo chmod +x "$target" &&
-      echo "Installed fk to $target"
+    sudo cp "$script_path" "$target" && sudo chmod +x "$target" \
+      && echo "Installed fk to $target"
   else
-    cp "$script_path" "$target" && chmod +x "$target" &&
-      echo "Installed fk to $target"
+    cp "$script_path" "$target" && chmod +x "$target" \
+      && echo "Installed fk to $target"
   fi
+
+  # Clean up .git folder if present
+  if [ -d "$repo_root/.git" ]; then
+    echo "Removing Git folder from $repo_root..."
+    rm -rf "$repo_root/.git"
+  fi
+}
+
 }
 
 update_fk() {
