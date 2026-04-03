@@ -19,7 +19,13 @@ fi
 
 chmod +x "$TMP"
 if [ ! -w "$(dirname "$INSTALL_PATH")" ]; then
-  sudo mv "$TMP" "$INSTALL_PATH"
+  if command -v sudo > /dev/null 2>&1; then
+    sudo mv "$TMP" "$INSTALL_PATH"
+  else
+    echo "Error: cannot write to $(dirname "$INSTALL_PATH") and sudo is not available."
+    rm -f "$TMP"
+    exit 1
+  fi
 else
   mv "$TMP" "$INSTALL_PATH"
 fi
