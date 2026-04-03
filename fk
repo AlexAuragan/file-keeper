@@ -2,8 +2,10 @@
 
 DB="$HOME/.file_keeper"
 
+FK_LAST_CMD="${XDG_CACHE_HOME:-$HOME/.cache}/fk_last_cmd"
+
 run_and_record() {
-  echo "$*" > ~/.fk_last_cmd
+  echo "$*" > "$FK_LAST_CMD"
   "$@"
 }
 
@@ -246,12 +248,65 @@ cat_file() {
   run_and_record cat "$path"
 }
 
+setup_shell_integration() {
+  local BASH_BLOCK='
+# fk shell integration
+_fk_inject_history() {
+  local _fk_f="${XDG_CACHE_HOME:-$HOME/.cache}/fk_last_cmd"
+  if [ -f "$_fk_f" ]; then
+    history -s "$(cat "$_fk_f")"
+    rm -f "$_fk_f"
+  fi
+}
+PROMPT_COMMAND="_fk_inject_history${PROMPT_COMMAND:+; $PROMPT_COMMAND}"'
+
+  local ZSH_BLOCK='
+# fk shell integration
+_fk_inject_history() {
+  local _fk_f="${XDG_CACHE_HOME:-$HOME/.cache}/fk_last_cmd"
+  if [ -f "$_fk_f" ]; then
+    print -s "$(cat "$_fk_f")"
+    rm -f "$_fk_f"
+  fi
+}
+precmd_functions+=(_fk_inject_history)'
+
+  local injected=0
+
+  if [ -f "$HOME/.bashrc" ] && ! grep -q '_fk_inject_history' "$HOME/.bashrc"; then
+    printf '%s\n' "$BASH_BLOCK" >> "$HOME/.bashrc"
+    echo "Shell integration added to ~/.bashrc"
+    injected=1
+  elif [ -f "$HOME/.bashrc" ]; then
+    echo "Shell integration already present in ~/.bashrc"
+  fi
+
+  if [ -f "$HOME/.zshrc" ] && ! grep -q '_fk_inject_history' "$HOME/.zshrc"; then
+    printf '%s\n' "$ZSH_BLOCK" >> "$HOME/.zshrc"
+    echo "Shell integration added to ~/.zshrc"
+    injected=1
+  elif [ -f "$HOME/.zshrc" ]; then
+    echo "Shell integration already present in ~/.zshrc"
+  fi
+
+  if [ $injected -eq 1 ]; then
+    echo "Reload your shell (or run 'source ~/.bashrc' / 'source ~/.zshrc') to activate."
+  fi
+}
+
 uninstall() {
   echo -n "This will remove fk and all its data. Are you sure? [y/N] "
   read -r confirm
   [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; return; }
 
-  rm -f "$HOME/.file_keeper" "$HOME/.fk_last_cmd"
+  rm -f "$HOME/.file_keeper" "${XDG_CACHE_HOME:-$HOME/.cache}/fk_last_cmd"
+
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    if [ -f "$rc" ] && grep -q '_fk_inject_history' "$rc"; then
+      sed -i '/^# fk shell integration$/,/^precmd_functions+=(_fk_inject_history)$\|^PROMPT_COMMAND=.*_fk_inject_history.*$/{ /^$/d; d; }' "$rc"
+      echo "Shell integration removed from $rc"
+    fi
+  done
 
   local bin="/usr/local/bin/fk"
   if [ -w "$(dirname "$bin")" ]; then
@@ -272,6 +327,7 @@ case "$1" in
   ;;
 --edit) edit_file ;;
 --delete) delete_file ;;
+--setup-shell) setup_shell_integration ;;
 --uninstall) uninstall ;;
 --cat)
   shift
