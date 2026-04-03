@@ -84,7 +84,9 @@ print_lists() {
   for entry in "${service_files[@]}"; do
     local path="${entry%%|*}"
     local desc="${entry#*|}"
-    [ -n "$desc" ] && echo "  $letter) $path [$desc]" || echo "  $letter) $path"
+    local svc_name=$(basename "$path" .service)
+    [ "$desc" = "$svc_name" ] && desc=""
+    [ -n "$desc" ] && echo "  $letter) $svc_name [$desc]" || echo "  $letter) $svc_name"
     letter=$(echo "$letter" | tr "0-9a-z" "1-9a-z_")
     letter=$(echo "$letter" | tr "_z" "aa")
   done
