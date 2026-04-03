@@ -65,8 +65,20 @@ print_lists() {
   done
 }
 
+show_getting_started() {
+  echo "No files tracked yet. Get started:"
+  echo ""
+  echo "  fk --add <path> <description>"
+  echo ""
+  echo "Examples:"
+  echo "  fk --add /etc/nginx/nginx.conf      nginx config"
+  echo "  fk --add /etc/systemd/system/foo.service  my service"
+  echo ""
+  echo "Then run 'fk' to open the file picker."
+}
+
 list_files() {
-  build_lists
+  build_lists || { show_getting_started; return; }
 
   print_lists
   echo -n "Select (e.g., 1, ar, ai, aj): "
