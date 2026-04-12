@@ -248,6 +248,55 @@ cat_file() {
   run_and_record cat "$path"
 }
 
+list_paths() {
+  [ ! -s "$DB" ] && return 0
+  while IFS= read -r line; do
+    echo "${line%%|*}"
+  done <"$DB"
+}
+
+gather_proxmox() {
+  local cache_dir="/cache/file_keeper"
+
+  if ! command -v pct &>/dev/null; then
+    echo "Error: pct not found. This command must run on a Proxmox host."
+    return 1
+  fi
+
+  local ct_ids
+  ct_ids=$(pct list 2>/dev/null | awk 'NR>1 {print $1}')
+
+  if [ -z "$ct_ids" ]; then
+    echo "No containers found."
+    return 1
+  fi
+
+  for ctid in $ct_ids; do
+    echo "CT $ctid:"
+
+    local paths
+    paths=$(pct exec "$ctid" -- fk --list-paths 2>/dev/null)
+
+    if [ -z "$paths" ]; then
+      echo "  skipped (fk not installed or no files tracked)"
+      continue
+    fi
+
+    local dest="$cache_dir/CT$ctid"
+
+    while IFS= read -r path; do
+      [ -z "$path" ] && continue
+      local dest_file="$dest$path"
+      mkdir -p "$(dirname "$dest_file")"
+      if pct pull "$ctid" "$path" "$dest_file" 2>/dev/null; then
+        echo "  $path"
+      else
+        echo "  $path (failed)"
+      fi
+    done <<<"$paths"
+  done
+}
+
 setup_shell_integration() {
   local BASH_BLOCK='
 # fk shell integration
@@ -321,12 +370,22 @@ uninstall() {
 }
 
 case "$1" in
+--version)
+  VERSION_FILE="$(dirname "$(realpath "$0")")/.version"
+  if [ -f "$VERSION_FILE" ]; then
+    cat "$VERSION_FILE"
+  else
+    echo "Version file not found."
+  fi
+  ;;
 --add)
   shift
   add_file "$@"
   ;;
 --edit) edit_file ;;
 --delete) delete_file ;;
+--list-paths) list_paths ;;
+--gather-proxmox) gather_proxmox ;;
 --setup-shell) setup_shell_integration ;;
 --uninstall) uninstall ;;
 --cat)
