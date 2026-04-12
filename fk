@@ -266,6 +266,7 @@ list_paths() {
 
 gather_proxmox() {
 	local cache_dir="/cache/file_keeper"
+	local lxc_base="/var/lib/lxc"
 
 	if ! command -v pct &>/dev/null; then
 		echo "Error: pct not found. This command must run on a Proxmox host."
@@ -283,26 +284,28 @@ gather_proxmox() {
 	for ctid in $ct_ids; do
 		echo "CT $ctid:"
 
-		local paths
-		paths=$(pct exec "$ctid" -- fk --list-paths 2>/dev/null)
+		local rootfs="$lxc_base/$ctid/rootfs"
+		local ct_db="$rootfs/root/.file_keeper"
 
-		if [ -z "$paths" ]; then
+		if [ ! -f "$ct_db" ]; then
 			echo "  skipped (fk not installed or no files tracked)"
 			continue
 		fi
 
 		local dest="$cache_dir/CT$ctid"
 
-		while IFS= read -r path; do
+		while IFS= read -r line; do
+			local path="${line%%|*}"
 			[ -z "$path" ] && continue
+			local src="$rootfs$path"
 			local dest_file="$dest$path"
 			mkdir -p "$(dirname "$dest_file")"
-			if pct pull "$ctid" "$path" "$dest_file" 2>/dev/null; then
+			if cp "$src" "$dest_file" 2>/dev/null; then
 				echo "  $path"
 			else
 				echo "  $path (failed)"
 			fi
-		done <<<"$paths"
+		done <"$ct_db"
 	done
 }
 
