@@ -284,10 +284,21 @@ gather_proxmox() {
 	for ctid in $ct_ids; do
 		echo "CT $ctid:"
 
-		local rootfs="$lxc_base/$ctid/rootfs"
-		local ct_db="$rootfs/root/.file_keeper"
+		local status
+		status=$(pct status "$ctid" 2>/dev/null | awk '{print $2}')
 
-		if [ ! -f "$ct_db" ]; then
+		local ct_db_content=""
+
+		if [ "$status" = "running" ]; then
+			ct_db_content=$(pct exec "$ctid" -- cat /root/.file_keeper 2>/dev/null)
+		else
+			# Fallback: direct rootfs access (works for dir storage)
+			local rootfs="$lxc_base/$ctid/rootfs"
+			local ct_db="$rootfs/root/.file_keeper"
+			[ -f "$ct_db" ] && ct_db_content=$(cat "$ct_db")
+		fi
+
+		if [ -z "$ct_db_content" ]; then
 			echo "  skipped (fk not installed or no files tracked)"
 			continue
 		fi
@@ -297,15 +308,15 @@ gather_proxmox() {
 		while IFS= read -r line; do
 			local path="${line%%|*}"
 			[ -z "$path" ] && continue
-			local src="$rootfs$path"
 			local dest_file="$dest$path"
 			mkdir -p "$(dirname "$dest_file")"
-			if cp "$src" "$dest_file" 2>/dev/null; then
+			if pct exec "$ctid" -- cat "$path" >"$dest_file" 2>/dev/null; then
 				echo "  $path"
 			else
+				rm -f "$dest_file"
 				echo "  $path (failed)"
 			fi
-		done <"$ct_db"
+		done <<<"$ct_db_content"
 	done
 }
 
