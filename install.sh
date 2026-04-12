@@ -1,7 +1,9 @@
 #!/bin/bash
 
 RAW_URL="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main/fk"
+VERSION_URL="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main/.version"
 INSTALL_PATH="/usr/local/bin/fk"
+VERSION_INSTALL_PATH="/usr/local/bin/.version"
 
 setup_shell_integration() {
   local BASH_BLOCK='
@@ -47,33 +49,42 @@ precmd_functions+=(_fk_inject_history)'
   fi
 }
 
-TMP=$(mktemp)
-curl -sSL "$RAW_URL" -o "$TMP" || { echo "Failed to download fk."; rm -f "$TMP"; exit 1; }
+TMP_VERSION=$(mktemp)
+curl -sSL "$VERSION_URL" -o "$TMP_VERSION" || { echo "Failed to download version info."; rm -f "$TMP_VERSION"; exit 1; }
+
+REMOTE_VERSION=$(cat "$TMP_VERSION")
+LOCAL_VERSION=$(cat "$VERSION_INSTALL_PATH" 2>/dev/null)
+
+if [ "$REMOTE_VERSION" = "$LOCAL_VERSION" ]; then
+  echo "fk is already up to date (${REMOTE_VERSION})."
+  rm -f "$TMP_VERSION"
+  setup_shell_integration
+  exit 0
+fi
 
 if [ -f "$INSTALL_PATH" ]; then
-  if diff -q "$TMP" "$INSTALL_PATH" > /dev/null 2>&1; then
-    echo "fk is already up to date."
-    rm -f "$TMP"
-    setup_shell_integration
-    exit 0
-  fi
-  echo "Updating fk..."
+  echo "Updating fk (${LOCAL_VERSION} -> ${REMOTE_VERSION})..."
 else
-  echo "Installing fk..."
+  echo "Installing fk ${REMOTE_VERSION}..."
 fi
+
+TMP=$(mktemp)
+curl -sSL "$RAW_URL" -o "$TMP" || { echo "Failed to download fk."; rm -f "$TMP" "$TMP_VERSION"; exit 1; }
 
 chmod +x "$TMP"
 if [ ! -w "$(dirname "$INSTALL_PATH")" ]; then
   if command -v sudo > /dev/null 2>&1; then
     sudo mv "$TMP" "$INSTALL_PATH"
+    sudo mv "$TMP_VERSION" "$VERSION_INSTALL_PATH"
   else
     echo "Error: cannot write to $(dirname "$INSTALL_PATH") and sudo is not available."
-    rm -f "$TMP"
+    rm -f "$TMP" "$TMP_VERSION"
     exit 1
   fi
 else
   mv "$TMP" "$INSTALL_PATH"
+  mv "$TMP_VERSION" "$VERSION_INSTALL_PATH"
 fi
 
-echo "Done. fk installed to $INSTALL_PATH"
+echo "Done. fk ${REMOTE_VERSION} installed to $INSTALL_PATH"
 setup_shell_integration

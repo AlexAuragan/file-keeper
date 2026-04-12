@@ -5,151 +5,154 @@ DB="$HOME/.file_keeper"
 FK_LAST_CMD="${XDG_CACHE_HOME:-$HOME/.cache}/fk_last_cmd"
 
 run_and_record() {
-  echo "$*" > "$FK_LAST_CMD"
-  "$@"
+	echo "$*" >"$FK_LAST_CMD"
+	"$@"
 }
 
 add_file() {
-  if [ "$1" = "-s" ]; then
-    shift
-    local svc_name="$1"
-    shift
-    if [ -z "$svc_name" ]; then
-      echo "Usage: fk --add -s <service-name> [description]"
-      return
-    fi
-    local resolved
-    resolved=$(systemctl show "$svc_name" --property=FragmentPath 2>/dev/null | cut -d= -f2)
-    if [ -z "$resolved" ]; then
-      echo "Service not found: $svc_name"
-      return
-    fi
-    local description="${*:-$svc_name}"
-    grep -q "^$resolved|" "$DB" 2>/dev/null && {
-      echo "File already tracked: $resolved"
-      return
-    }
-    echo "$resolved|$description" >>"$DB"
-    echo "Added: $resolved [$description]"
-    return
-  fi
+	if [ "$1" = "-s" ]; then
+		shift
+		local svc_name="$1"
+		shift
+		if [ -z "$svc_name" ]; then
+			echo "Usage: fk --add -s <service-name> [description]"
+			return
+		fi
+		local resolved
+		resolved=$(systemctl show "$svc_name" --property=FragmentPath 2>/dev/null | cut -d= -f2)
+		if [ -z "$resolved" ]; then
+			echo "Service not found: $svc_name"
+			return
+		fi
+		local description="${*:-$svc_name}"
+		grep -q "^$resolved|" "$DB" 2>/dev/null && {
+			echo "File already tracked: $resolved"
+			return
+		}
+		echo "$resolved|$description" >>"$DB"
+		echo "Added: $resolved [$description]"
+		return
+	fi
 
-  local file="$1"
-  shift
-  local description="$*"
+	local file="$1"
+	shift
+	local description="$*"
 
-  if [ -z "$file" ] || [ -z "$description" ]; then
-    echo "Usage: fk --add <path> <description>"
-    echo "       fk --add -s <service-name> [description]"
-    return
-  fi
+	if [ -z "$file" ] || [ -z "$description" ]; then
+		echo "Usage: fk --add <path> <description>"
+		echo "       fk --add -s <service-name> [description]"
+		return
+	fi
 
-  grep -q "^$file|" "$DB" 2>/dev/null && {
-    echo "File already tracked: $file"
-    return
-  }
+	grep -q "^$file|" "$DB" 2>/dev/null && {
+		echo "File already tracked: $file"
+		return
+	}
 
-  echo "$file|$description" >>"$DB"
-  echo "Added: $file [$description]"
+	echo "$file|$description" >>"$DB"
+	echo "Added: $file [$description]"
 }
 
 build_lists() {
-  if [ ! -s "$DB" ]; then
-    echo "No files tracked yet."
-    return 1
-  fi
+	if [ ! -s "$DB" ]; then
+		echo "No files tracked yet."
+		return 1
+	fi
 
-  while IFS= read -r line; do
-    local file="${line%%|*}"
-    local desc="${line#*|}"
-    [ "$file" = "$desc" ] && desc=""
-    if [[ "$file" == *"/systemd/"* ]]; then
-      service_files+=("$file|$desc")
-    else
-      config_files+=("$file|$desc")
-    fi
-  done <"$DB"
+	while IFS= read -r line; do
+		local file="${line%%|*}"
+		local desc="${line#*|}"
+		[ "$file" = "$desc" ] && desc=""
+		if [[ "$file" == *"/systemd/"* ]]; then
+			service_files+=("$file|$desc")
+		else
+			config_files+=("$file|$desc")
+		fi
+	done <"$DB"
 }
 
 print_lists() {
-  echo "Config files:"
-  local i=1
-  for entry in "${config_files[@]}"; do
-    local path="${entry%%|*}"
-    local desc="${entry#*|}"
-    [ -n "$desc" ] && echo "  $i) $path [$desc]" || echo "  $i) $path"
-    ((i++))
-  done
+	echo "Config files:"
+	local i=1
+	for entry in "${config_files[@]}"; do
+		local path="${entry%%|*}"
+		local desc="${entry#*|}"
+		[ -n "$desc" ] && echo "  $i) $path [$desc]" || echo "  $i) $path"
+		((i++))
+	done
 
-  echo "Service files:"
-  local letter="a"
-  for entry in "${service_files[@]}"; do
-    local path="${entry%%|*}"
-    local desc="${entry#*|}"
-    local svc_name=$(basename "$path" .service)
-    [ "$desc" = "$svc_name" ] && desc=""
-    [ -n "$desc" ] && echo "  $letter) $svc_name [$desc]" || echo "  $letter) $svc_name"
-    letter=$(echo "$letter" | tr "0-9a-z" "1-9a-z_")
-    letter=$(echo "$letter" | tr "_z" "aa")
-  done
+	echo "Service files:"
+	local letter="a"
+	for entry in "${service_files[@]}"; do
+		local path="${entry%%|*}"
+		local desc="${entry#*|}"
+		local svc_name=$(basename "$path" .service)
+		[ "$desc" = "$svc_name" ] && desc=""
+		[ -n "$desc" ] && echo "  $letter) $svc_name [$desc]" || echo "  $letter) $svc_name"
+		letter=$(echo "$letter" | tr "0-9a-z" "1-9a-z_")
+		letter=$(echo "$letter" | tr "_z" "aa")
+	done
 }
 
 show_getting_started() {
-  echo "No files tracked yet. Get started:"
-  echo ""
-  echo "  fk --add <path> <description>"
-  echo ""
-  echo "Examples:"
-  echo "  fk --add /etc/nginx/nginx.conf      nginx config"
-  echo "  fk --add /etc/systemd/system/foo.service  my service"
-  echo ""
-  echo "Then run 'fk' to open the file picker."
+	echo "No files tracked yet. Get started:"
+	echo ""
+	echo "  fk --add <path> <description>"
+	echo ""
+	echo "Examples:"
+	echo "  fk --add /etc/nginx/nginx.conf      nginx config"
+	echo "  fk --add /etc/systemd/system/foo.service  my service"
+	echo ""
+	echo "Then run 'fk' to open the file picker."
 }
 
 list_files() {
-  build_lists || { show_getting_started; return; }
+	build_lists || {
+		show_getting_started
+		return
+	}
 
-  print_lists
-  echo -n "Select (e.g., 1, ar, ai, aj): "
-  read -r choice
-  SELECTED_PATH=$(get_path_from_choice "$choice" config_files[@] service_files[@])
-  handle_choice "$choice" config_files[@] service_files[@]
+	print_lists
+	echo -n "Select (e.g., 1, ar, ai, aj): "
+	read -r choice
+	SELECTED_PATH=$(get_path_from_choice "$choice" config_files[@] service_files[@])
+	handle_choice "$choice" config_files[@] service_files[@]
 }
 
 get_path_from_choice() {
-  local choice="$1"
-  shift
-  local configs=("${!1}")
-  shift
-  local services=("${!1}")
+	local choice="$1"
+	shift
+	local configs=("${!1}")
+	shift
+	local services=("${!1}")
 
-  if [[ "$choice" =~ ^[0-9]+ ]]; then
-    local idx=$((choice - 1))
-    [[ $idx -ge 0 && $idx -lt ${#configs[@]} ]] || {
-      echo "Invalid number"
-      return
-    }
-    echo "${configs[$idx]%%|*}"
-  elif [[ "$choice" =~ ^c[0-9] ]]; then
-    return
-  elif [[ "$choice" =~ ^[a-z] ]]; then
-    local letter="${choice:0:1}"
-    local idx=$(($(printf '%d' "'$letter") - 97))
-    [[ $idx -ge 0 && $idx -lt ${#services[@]} ]] || {
-      echo "Invalid letter"
-      return
-    }
-    echo "${services[$idx]%%|*}"
-  fi
+	if [[ "$choice" =~ ^[0-9]+ ]]; then
+		local idx=$((choice - 1))
+		[[ $idx -ge 0 && $idx -lt ${#configs[@]} ]] || {
+			echo "Invalid number"
+			return
+		}
+		echo "${configs[$idx]%%|*}"
+	elif [[ "$choice" =~ ^c[0-9] ]]; then
+		return
+	elif [[ "$choice" =~ ^[a-z] ]]; then
+		local letter="${choice:0:1}"
+		local idx=$(($(printf '%d' "'$letter") - 97))
+		[[ $idx -ge 0 && $idx -lt ${#services[@]} ]] || {
+			echo "Invalid letter"
+			return
+		}
+		echo "${services[$idx]%%|*}"
+	fi
 }
 
 edit_file() {
-  list_files
-  [ -z "$SELECTED_PATH" ] && return
-  echo -n "Enter new description for '$SELECTED_PATH': "
-  read -r new_desc
+	list_files
+	[ -z "$SELECTED_PATH" ] && return
+	echo -n "Enter new description for '$SELECTED_PATH': "
+	read -r new_desc
 
-  awk -F'|' -v file="$SELECTED_PATH" -v desc="$new_desc" '{
+	awk -F'|' -v file="$SELECTED_PATH" -v desc="$new_desc" '{
     if ($1 == file) {
       print file "|" desc
     } else {
@@ -157,148 +160,154 @@ edit_file() {
     }
   }' "$DB" >"$DB.tmp" && mv "$DB.tmp" "$DB"
 
-  echo "Updated description for $SELECTED_PATH"
+	echo "Updated description for $SELECTED_PATH"
 }
 
 delete_file() {
-  list_files
-  [ -z "$SELECTED_PATH" ] && return
-  grep -v "^$SELECTED_PATH|" "$DB" >"$DB.tmp" && mv "$DB.tmp" "$DB"
-  echo "Deleted $SELECTED_PATH from tracking"
+	list_files
+	[ -z "$SELECTED_PATH" ] && return
+	grep -v "^$SELECTED_PATH|" "$DB" >"$DB.tmp" && mv "$DB.tmp" "$DB"
+	echo "Deleted $SELECTED_PATH from tracking"
 }
 
 handle_choice() {
-  local choice="$1"
-  shift
-  local configs=("${!1}")
-  shift
-  local services=("${!1}")
+	local choice="$1"
+	shift
+	local configs=("${!1}")
+	shift
+	local services=("${!1}")
 
-  if [[ "$choice" =~ ^[0-9]+ ]]; then
-    local idx=$((choice - 1))
-    [[ $idx -ge 0 && $idx -lt ${#configs[@]} ]] || {
-      echo "Invalid number"
-      return
-    }
-    local path="${configs[$idx]%%|*}"
-    run_and_record nano "$path"
+	if [[ "$choice" =~ ^[0-9]+ ]]; then
+		local idx=$((choice - 1))
+		[[ $idx -ge 0 && $idx -lt ${#configs[@]} ]] || {
+			echo "Invalid number"
+			return
+		}
+		local path="${configs[$idx]%%|*}"
+		run_and_record nano "$path"
 
-  elif [[ "$choice" =~ ^c[0-9] ]]; then
-    cat_file "${choice:1}"
+	elif [[ "$choice" =~ ^c[0-9] ]]; then
+		cat_file "${choice:1}"
 
-  elif [[ "$choice" =~ ^[a-z] ]]; then
-    local letter="${choice:0:1}"
-    local action="${choice:1}"
-    local idx=$(($(printf '%d' "'$letter") - 97))
-    [[ $idx -ge 0 && $idx -lt ${#services[@]} ]] || {
-      echo "Invalid letter"
-      return
-    }
+	elif [[ "$choice" =~ ^[a-z] ]]; then
+		local letter="${choice:0:1}"
+		local action="${choice:1}"
+		local idx=$(($(printf '%d' "'$letter") - 97))
+		[[ $idx -ge 0 && $idx -lt ${#services[@]} ]] || {
+			echo "Invalid letter"
+			return
+		}
 
-    local svc_file="${services[$idx]%%|*}"
-    local svc_name=$(basename "$svc_file" .service)
+		local svc_file="${services[$idx]%%|*}"
+		local svc_name=$(basename "$svc_file" .service)
 
-    case "$action" in
-    "") run_and_record nano "$svc_file" ;;
-    "r") run_and_record systemctl restart "$svc_name" ;;
-    "s") run_and_record systemctl start "$svc_name" ;;
-    "i") run_and_record systemctl status "$svc_name" ;;
-    "j") run_and_record journalctl -u "$svc_name" ;;
-    "jf") run_and_record journalctl -u "$svc_name" -f ;;
-    *) echo "Unknown action: $action" ;;
-    esac
-  else
-    echo "Invalid input"
-  fi
+		case "$action" in
+		"") run_and_record nano "$svc_file" ;;
+		"r") run_and_record systemctl restart "$svc_name" ;;
+		"s") run_and_record systemctl start "$svc_name" ;;
+		"i") run_and_record systemctl status "$svc_name" ;;
+		"j") run_and_record journalctl -u "$svc_name" ;;
+		"jf") run_and_record journalctl -u "$svc_name" -f ;;
+		*) echo "Unknown action: $action" ;;
+		esac
+	else
+		echo "Invalid input"
+	fi
 }
 
 cat_file() {
-  local choice="$1"
+	local choice="$1"
 
-  if [ ! -s "$DB" ]; then
-    echo "No files tracked yet."
-    return 1
-  fi
+	if [ ! -s "$DB" ]; then
+		echo "No files tracked yet."
+		return 1
+	fi
 
-  local config_files=()
-  local service_files=()
-  while IFS= read -r line; do
-    local file="${line%%|*}"
-    if [[ "$file" == *"/systemd/"* ]]; then
-      service_files+=("$file")
-    else
-      config_files+=("$file")
-    fi
-  done <"$DB"
+	local config_files=()
+	local service_files=()
+	while IFS= read -r line; do
+		local file="${line%%|*}"
+		if [[ "$file" == *"/systemd/"* ]]; then
+			service_files+=("$file")
+		else
+			config_files+=("$file")
+		fi
+	done <"$DB"
 
-  local path
-  if [[ "$choice" =~ ^[0-9]+$ ]]; then
-    local idx=$((choice - 1))
-    [[ $idx -ge 0 && $idx -lt ${#config_files[@]} ]] || { echo "Invalid number: $choice"; return 1; }
-    path="${config_files[$idx]}"
-  elif [[ "$choice" =~ ^[a-z]$ ]]; then
-    local idx=$(($(printf '%d' "'$choice") - 97))
-    [[ $idx -ge 0 && $idx -lt ${#service_files[@]} ]] || { echo "Invalid letter: $choice"; return 1; }
-    path="${service_files[$idx]}"
-  else
-    echo "Usage: fk --cat <number|letter>"
-    return 1
-  fi
+	local path
+	if [[ "$choice" =~ ^[0-9]+$ ]]; then
+		local idx=$((choice - 1))
+		[[ $idx -ge 0 && $idx -lt ${#config_files[@]} ]] || {
+			echo "Invalid number: $choice"
+			return 1
+		}
+		path="${config_files[$idx]}"
+	elif [[ "$choice" =~ ^[a-z]$ ]]; then
+		local idx=$(($(printf '%d' "'$choice") - 97))
+		[[ $idx -ge 0 && $idx -lt ${#service_files[@]} ]] || {
+			echo "Invalid letter: $choice"
+			return 1
+		}
+		path="${service_files[$idx]}"
+	else
+		echo "Usage: fk --cat <number|letter>"
+		return 1
+	fi
 
-  run_and_record cat "$path"
+	run_and_record cat "$path"
 }
 
 list_paths() {
-  [ ! -s "$DB" ] && return 0
-  while IFS= read -r line; do
-    echo "${line%%|*}"
-  done <"$DB"
+	[ ! -s "$DB" ] && return 0
+	while IFS= read -r line; do
+		echo "${line%%|*}"
+	done <"$DB"
 }
 
 gather_proxmox() {
-  local cache_dir="/cache/file_keeper"
+	local cache_dir="/cache/file_keeper"
 
-  if ! command -v pct &>/dev/null; then
-    echo "Error: pct not found. This command must run on a Proxmox host."
-    return 1
-  fi
+	if ! command -v pct &>/dev/null; then
+		echo "Error: pct not found. This command must run on a Proxmox host."
+		return 1
+	fi
 
-  local ct_ids
-  ct_ids=$(pct list 2>/dev/null | awk 'NR>1 {print $1}')
+	local ct_ids
+	ct_ids=$(pct list 2>/dev/null | awk 'NR>1 {print $1}')
 
-  if [ -z "$ct_ids" ]; then
-    echo "No containers found."
-    return 1
-  fi
+	if [ -z "$ct_ids" ]; then
+		echo "No containers found."
+		return 1
+	fi
 
-  for ctid in $ct_ids; do
-    echo "CT $ctid:"
+	for ctid in $ct_ids; do
+		echo "CT $ctid:"
 
-    local paths
-    paths=$(pct exec "$ctid" -- fk --list-paths 2>/dev/null)
+		local paths
+		paths=$(pct exec "$ctid" -- fk --list-paths 2>/dev/null)
 
-    if [ -z "$paths" ]; then
-      echo "  skipped (fk not installed or no files tracked)"
-      continue
-    fi
+		if [ -z "$paths" ]; then
+			echo "  skipped (fk not installed or no files tracked)"
+			continue
+		fi
 
-    local dest="$cache_dir/CT$ctid"
+		local dest="$cache_dir/CT$ctid"
 
-    while IFS= read -r path; do
-      [ -z "$path" ] && continue
-      local dest_file="$dest$path"
-      mkdir -p "$(dirname "$dest_file")"
-      if pct pull "$ctid" "$path" "$dest_file" 2>/dev/null; then
-        echo "  $path"
-      else
-        echo "  $path (failed)"
-      fi
-    done <<<"$paths"
-  done
+		while IFS= read -r path; do
+			[ -z "$path" ] && continue
+			local dest_file="$dest$path"
+			mkdir -p "$(dirname "$dest_file")"
+			if pct pull "$ctid" "$path" "$dest_file" 2>/dev/null; then
+				echo "  $path"
+			else
+				echo "  $path (failed)"
+			fi
+		done <<<"$paths"
+	done
 }
 
 setup_shell_integration() {
-  local BASH_BLOCK='
+	local BASH_BLOCK='
 # fk shell integration
 _fk_inject_history() {
   local _fk_f="${XDG_CACHE_HOME:-$HOME/.cache}/fk_last_cmd"
@@ -309,7 +318,7 @@ _fk_inject_history() {
 }
 PROMPT_COMMAND="_fk_inject_history${PROMPT_COMMAND:+; $PROMPT_COMMAND}"'
 
-  local ZSH_BLOCK='
+	local ZSH_BLOCK='
 # fk shell integration
 _fk_inject_history() {
   local _fk_f="${XDG_CACHE_HOME:-$HOME/.cache}/fk_last_cmd"
@@ -320,68 +329,71 @@ _fk_inject_history() {
 }
 precmd_functions+=(_fk_inject_history)'
 
-  local injected=0
+	local injected=0
 
-  if [ -f "$HOME/.bashrc" ] && ! grep -q '_fk_inject_history' "$HOME/.bashrc"; then
-    printf '%s\n' "$BASH_BLOCK" >> "$HOME/.bashrc"
-    echo "Shell integration added to ~/.bashrc"
-    injected=1
-  elif [ -f "$HOME/.bashrc" ]; then
-    echo "Shell integration already present in ~/.bashrc"
-  fi
+	if [ -f "$HOME/.bashrc" ] && ! grep -q '_fk_inject_history' "$HOME/.bashrc"; then
+		printf '%s\n' "$BASH_BLOCK" >>"$HOME/.bashrc"
+		echo "Shell integration added to ~/.bashrc"
+		injected=1
+	elif [ -f "$HOME/.bashrc" ]; then
+		echo "Shell integration already present in ~/.bashrc"
+	fi
 
-  if [ -f "$HOME/.zshrc" ] && ! grep -q '_fk_inject_history' "$HOME/.zshrc"; then
-    printf '%s\n' "$ZSH_BLOCK" >> "$HOME/.zshrc"
-    echo "Shell integration added to ~/.zshrc"
-    injected=1
-  elif [ -f "$HOME/.zshrc" ]; then
-    echo "Shell integration already present in ~/.zshrc"
-  fi
+	if [ -f "$HOME/.zshrc" ] && ! grep -q '_fk_inject_history' "$HOME/.zshrc"; then
+		printf '%s\n' "$ZSH_BLOCK" >>"$HOME/.zshrc"
+		echo "Shell integration added to ~/.zshrc"
+		injected=1
+	elif [ -f "$HOME/.zshrc" ]; then
+		echo "Shell integration already present in ~/.zshrc"
+	fi
 
-  if [ $injected -eq 1 ]; then
-    echo "Reload your shell (or run 'source ~/.bashrc' / 'source ~/.zshrc') to activate."
-  fi
+	if [ $injected -eq 1 ]; then
+		echo "Reload your shell (or run 'source ~/.bashrc' / 'source ~/.zshrc') to activate."
+	fi
 }
 
 uninstall() {
-  echo -n "This will remove fk and all its data. Are you sure? [y/N] "
-  read -r confirm
-  [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; return; }
+	echo -n "This will remove fk and all its data. Are you sure? [y/N] "
+	read -r confirm
+	[[ "$confirm" =~ ^[Yy]$ ]] || {
+		echo "Aborted."
+		return
+	}
 
-  rm -f "$HOME/.file_keeper" "${XDG_CACHE_HOME:-$HOME/.cache}/fk_last_cmd"
+	rm -f "$HOME/.file_keeper" "${XDG_CACHE_HOME:-$HOME/.cache}/fk_last_cmd"
 
-  for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-    if [ -f "$rc" ] && grep -q '_fk_inject_history' "$rc"; then
-      sed -i '/^# fk shell integration$/,/^precmd_functions+=(_fk_inject_history)$\|^PROMPT_COMMAND=.*_fk_inject_history.*$/{ /^$/d; d; }' "$rc"
-      echo "Shell integration removed from $rc"
-    fi
-  done
+	for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+		if [ -f "$rc" ] && grep -q '_fk_inject_history' "$rc"; then
+			sed -i '/^# fk shell integration$/,/^precmd_functions+=(_fk_inject_history)$\|^PROMPT_COMMAND=.*_fk_inject_history.*$/{ /^$/d; d; }' "$rc"
+			echo "Shell integration removed from $rc"
+		fi
+	done
 
-  local bin="/usr/local/bin/fk"
-  if [ -w "$(dirname "$bin")" ]; then
-    rm -f "$bin"
-  elif command -v sudo > /dev/null 2>&1; then
-    sudo rm -f "$bin"
-  else
-    echo "Warning: cannot remove $bin (no write permission and sudo unavailable)."
-  fi
+	local bin="/usr/local/bin/fk"
+	if [ -w "$(dirname "$bin")" ]; then
+		rm -f "$bin"
+	elif command -v sudo >/dev/null 2>&1; then
+		sudo rm -f "$bin"
+	else
+		echo "Warning: cannot remove $bin (no write permission and sudo unavailable)."
+	fi
 
-  echo "fk has been uninstalled."
+	echo "fk has been uninstalled."
 }
 
 case "$1" in
 --version)
-  VERSION_FILE="$(dirname "$(realpath "$0")")/.version"
-  if [ -f "$VERSION_FILE" ]; then
-    cat "$VERSION_FILE"
-  else
-    echo "Version file not found."
-  fi
-  ;;
+	VERSION_FILE="$(dirname "$(realpath "$0")")/.version"
+	if [ -f "$VERSION_FILE" ]; then
+		cat "$VERSION_FILE"
+	else
+		echo "Version file not found."
+	fi
+	;;
 --add)
-  shift
-  add_file "$@"
-  ;;
+	shift
+	add_file "$@"
+	;;
 --edit) edit_file ;;
 --delete) delete_file ;;
 --list-paths) list_paths ;;
@@ -389,16 +401,16 @@ case "$1" in
 --setup-shell) setup_shell_integration ;;
 --uninstall) uninstall ;;
 --cat)
-  shift
-  cat_file "$1"
-  ;;
+	shift
+	cat_file "$1"
+	;;
 "")
-  list_files
-  ;;
+	list_files
+	;;
 *)
-  config_files=()
-  service_files=()
-  build_lists
-  handle_choice "$1" config_files[@] service_files[@]
-  ;;
+	config_files=()
+	service_files=()
+	build_lists
+	handle_choice "$1" config_files[@] service_files[@]
+	;;
 esac
