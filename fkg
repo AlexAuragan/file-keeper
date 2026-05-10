@@ -1,6 +1,6 @@
 #!/bin/bash
 
-NODES_FILE="$HOME/.fg_nodes"
+NODES_FILE="$HOME/.fkg_nodes"
 
 gather_node() {
 	local node="$1"
@@ -134,7 +134,7 @@ update() {
 
 	echo "Updating $local_version -> $remote_version..."
 
-	for bin in fk fg; do
+	for bin in fk fkg; do
 		local tmp
 		tmp=$(mktemp)
 		curl -sSL "$base_url/$bin" -o "$tmp" || { echo "Failed to download $bin."; rm -f "$tmp"; return 1; }
@@ -165,14 +165,14 @@ update() {
 }
 
 show_help() {
-	echo "fg - file gatherer"
+	echo "fkg - file keeper gatherer"
 	echo ""
-	echo "Usage: fg <command> [args]"
+	echo "Usage: fkg <command> [args]"
 	echo ""
-	echo "  proxmox              Gather from all nodes listed in ~/.fg_nodes"
+	echo "  proxmox              Gather from all nodes listed in ~/.fkg_nodes"
 	echo "  proxmox <node...>    Gather from specific nodes"
 	echo ""
-	echo "  --update             Update fk and fg to the latest version"
+	echo "  --update             Update fk and fkg to the latest version"
 	echo "  --help               Show this help message"
 	echo ""
 	echo "Node resolution:"
@@ -181,7 +181,7 @@ show_help() {
 	echo ""
 	echo "Output: /cache/file_keeper/<node>/CT<id>/<path>"
 	echo ""
-	echo "Config: ~/.fg_nodes — one node hostname per line, # for comments"
+	echo "Config: ~/.fkg_nodes — one node hostname per line, # for comments"
 }
 
 case "$1" in

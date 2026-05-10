@@ -328,7 +328,7 @@ uninstall() {
 		fi
 	done
 
-	for bin in "/usr/local/bin/fk" "/usr/local/bin/fg"; do
+	for bin in "/usr/local/bin/fk" "/usr/local/bin/fkg"; do
 		if [ -w "$(dirname "$bin")" ]; then
 			rm -f "$bin"
 		elif command -v sudo >/dev/null 2>&1; then
@@ -358,7 +358,7 @@ update() {
 
 	echo "Updating $local_version -> $remote_version..."
 
-	for bin in fk fg; do
+	for bin in fk fkg; do
 		local tmp
 		tmp=$(mktemp)
 		curl -sSL "$base_url/$bin" -o "$tmp" || { echo "Failed to download $bin."; rm -f "$tmp"; return 1; }
@@ -409,7 +409,7 @@ show_help() {
 	echo "  --cat <number|letter>        Print a tracked file's contents"
 	echo "  --list-paths                 List all tracked file paths"
 	echo ""
-	echo "  --update                     Update fk and fg to the latest version"
+	echo "  --update                     Update fk and fkg to the latest version"
 	echo "  --setup-shell                Install shell history integration"
 	echo "  --uninstall                  Remove fk, fg, and all data"
 	echo "  --version                    Show installed version"

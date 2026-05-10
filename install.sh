@@ -1,10 +1,10 @@
 #!/bin/bash
 
 RAW_URL="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main/fk"
-FG_RAW_URL="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main/fg"
+FG_RAW_URL="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main/fkg"
 VERSION_URL="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main/.version"
 INSTALL_PATH="/usr/local/bin/fk"
-FG_INSTALL_PATH="/usr/local/bin/fg"
+FG_INSTALL_PATH="/usr/local/bin/fkg"
 VERSION_INSTALL_PATH="/usr/local/bin/.version"
 
 setup_shell_integration() {
@@ -94,5 +94,5 @@ else
 fi
 
 echo "Done. fk ${REMOTE_VERSION} installed to $INSTALL_PATH"
-echo "Done. fg ${REMOTE_VERSION} installed to $FG_INSTALL_PATH"
+echo "Done. fkg ${REMOTE_VERSION} installed to $FG_INSTALL_PATH"
 setup_shell_integration
