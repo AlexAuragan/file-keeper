@@ -341,6 +341,81 @@ uninstall() {
 	echo "fk has been uninstalled."
 }
 
+update() {
+	local base_url="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main"
+	local version_path="/usr/local/bin/.version"
+
+	local remote_version
+	remote_version=$(curl -sSL "$base_url/.version") || { echo "Failed to fetch version info."; return 1; }
+
+	local local_version
+	local_version=$(cat "$version_path" 2>/dev/null)
+
+	if [ "$remote_version" = "$local_version" ]; then
+		echo "Already up to date ($remote_version)."
+		return 0
+	fi
+
+	echo "Updating $local_version -> $remote_version..."
+
+	for bin in fk fg; do
+		local tmp
+		tmp=$(mktemp)
+		curl -sSL "$base_url/$bin" -o "$tmp" || { echo "Failed to download $bin."; rm -f "$tmp"; return 1; }
+		chmod +x "$tmp"
+		local dest="/usr/local/bin/$bin"
+		if [ -w "$(dirname "$dest")" ]; then
+			mv "$tmp" "$dest"
+		elif command -v sudo >/dev/null 2>&1; then
+			sudo mv "$tmp" "$dest"
+		else
+			echo "Error: cannot write to $(dirname "$dest") and sudo is unavailable."
+			rm -f "$tmp"
+			return 1
+		fi
+		echo "  $bin updated."
+	done
+
+	local tmp_ver
+	tmp_ver=$(mktemp)
+	echo "$remote_version" >"$tmp_ver"
+	if [ -w "$(dirname "$version_path")" ]; then
+		mv "$tmp_ver" "$version_path"
+	else
+		sudo mv "$tmp_ver" "$version_path"
+	fi
+
+	echo "Done. fk $remote_version installed."
+}
+
+show_help() {
+	echo "fk - file keeper"
+	echo ""
+	echo "Usage: fk [option] [args]"
+	echo ""
+	echo "  (no args)                    Open the interactive file picker"
+	echo "  <number>                     Open config file by index"
+	echo "  <letter>                     Open service file by letter"
+	echo "  <letter>r                    Restart service"
+	echo "  <letter>s                    Start service"
+	echo "  <letter>i                    Show service status"
+	echo "  <letter>j                    Show service journal"
+	echo "  <letter>jf                   Follow service journal"
+	echo ""
+	echo "  --add <path> <desc>          Track a file"
+	echo "  --add -s <service> [desc]    Track a systemd service file"
+	echo "  --edit                       Edit a tracked file's description"
+	echo "  --delete                     Remove a file from tracking"
+	echo "  --cat <number|letter>        Print a tracked file's contents"
+	echo "  --list-paths                 List all tracked file paths"
+	echo ""
+	echo "  --update                     Update fk and fg to the latest version"
+	echo "  --setup-shell                Install shell history integration"
+	echo "  --uninstall                  Remove fk, fg, and all data"
+	echo "  --version                    Show installed version"
+	echo "  --help                       Show this help message"
+}
+
 case "$1" in
 --version)
 	VERSION_FILE="$(dirname "$(realpath "$0")")/.version"
@@ -357,6 +432,8 @@ case "$1" in
 --edit) edit_file ;;
 --delete) delete_file ;;
 --list-paths) list_paths ;;
+--update) update ;;
+--help) show_help ;;
 --setup-shell) setup_shell_integration ;;
 --uninstall) uninstall ;;
 --cat)
