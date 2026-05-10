@@ -1,0 +1,16 @@
+#!/bin/bash
+case "$1" in
+    list)
+        printf "VMID       Status     Name\n"
+        printf '%s\n' "${MOCK_PCT_LIST:-108 running mas}"
+        ;;
+    status)
+        echo "status: ${MOCK_PCT_STATUS:-running}"
+        ;;
+    exec)
+        # pct exec <ctid> -- <cmd> [args...]
+        shift; shift; shift  # drop ctid, --
+        echo "${MOCK_PCT_EXEC_OUTPUT:-}"
+        ;;
+esac
+exit "${MOCK_PCT_EXIT:-0}"

@@ -1,0 +1,10 @@
+#!/bin/bash
+case "$1" in
+    show)
+        echo "FragmentPath=${MOCK_SYSTEMCTL_PATH-/etc/systemd/system/test.service}"
+        ;;
+    restart|start|status|stop)
+        echo "${MOCK_SYSTEMCTL_OUTPUT:-}"
+        ;;
+esac
+exit "${MOCK_SYSTEMCTL_EXIT:-0}"

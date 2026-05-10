@@ -1,0 +1,3 @@
+#!/bin/bash
+echo "${MOCK_JOURNALCTL_OUTPUT:-}"
+exit 0

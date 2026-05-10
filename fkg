@@ -1,11 +1,12 @@
 #!/bin/bash
 
-NODES_FILE="$HOME/.fkg_nodes"
+NODES_FILE="${FK_NODES_FILE:-$HOME/.fkg_nodes}"
+CACHE_DIR="${FK_CACHE_DIR:-/cache/file_keeper}"
 
 gather_node() {
 	local node="$1"          # display name, used for folder and local check
 	local target="${2:-$1}"  # SSH target (IP or hostname)
-	local cache_dir="/cache/file_keeper/$node"
+	local cache_dir="$CACHE_DIR/$node"
 	local lxc_base="/var/lib/lxc"
 	local is_local=false
 	[ "$node" = "$(hostname)" ] && is_local=true
@@ -164,6 +165,88 @@ gather_proxmox() {
 	done
 }
 
+git_init() {
+	local remote="$1"
+	if [ ! -d "$CACHE_DIR" ]; then
+		mkdir -p "$CACHE_DIR"
+	fi
+	if [ -d "$CACHE_DIR/.git" ]; then
+		echo "Git already initialized in $CACHE_DIR."
+	else
+		git -C "$CACHE_DIR" init
+	fi
+	if [ -n "$remote" ]; then
+		git -C "$CACHE_DIR" remote add origin "$remote" 2>/dev/null || \
+			git -C "$CACHE_DIR" remote set-url origin "$remote"
+		echo "Remote set to: $remote"
+	fi
+}
+
+git_push() {
+	local message="${1:-$(date '+%Y-%m-%d %H:%M:%S')}"
+	if [ ! -d "$CACHE_DIR/.git" ]; then
+		echo "Git not initialized. Run: fkg git --init [remote_url]"
+		return 1
+	fi
+	git -C "$CACHE_DIR" add -A
+	if git -C "$CACHE_DIR" diff --cached --quiet; then
+		echo "Nothing to commit."
+		return 0
+	fi
+	git -C "$CACHE_DIR" commit -m "$message"
+	git -C "$CACHE_DIR" push
+}
+
+git_log() {
+	if [ ! -d "$CACHE_DIR/.git" ]; then
+		echo "Git not initialized. Run: fkg git --init [remote_url]"
+		return 1
+	fi
+	git -C "$CACHE_DIR" log --oneline "$@"
+}
+
+git_restore() {
+	local file="$1"
+	local commit="${2:-HEAD}"
+	if [ ! -d "$CACHE_DIR/.git" ]; then
+		echo "Git not initialized. Run: fkg git --init [remote_url]"
+		return 1
+	fi
+	if [ -z "$file" ]; then
+		echo "Usage: fkg git --restore <file> [commit]"
+		return 1
+	fi
+	echo "--- $file @ $commit ---"
+	git -C "$CACHE_DIR" show "$commit:$file" 2>/dev/null || {
+		echo "File not found at commit $commit."
+		return 1
+	}
+	echo ""
+	echo -n "Restore $file from $commit? [y/N] "
+	read -r confirm
+	[[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; return; }
+	git -C "$CACHE_DIR" checkout "$commit" -- "$file"
+	echo "Restored: $CACHE_DIR/$file"
+}
+
+git_cmd() {
+	shift  # remove 'git'
+	case "$1" in
+	--init)  shift; git_init "$@" ;;
+	--push)  shift; git_push "$@" ;;
+	--log)   shift; git_log "$@" ;;
+	--restore) shift; git_restore "$@" ;;
+	*)
+		echo "Usage: fkg git <option>"
+		echo ""
+		echo "  --init [remote_url]        Init git repo in $CACHE_DIR"
+		echo "  --push [\"message\"]          Commit and push all changes"
+		echo "  --log [file]               Show commit history"
+		echo "  --restore <file> [commit]  Preview and restore a file from history"
+		;;
+	esac
+}
+
 update() {
 	local base_url="https://forgejo.auragan.fr/AlexAuragan/file-keeper/raw/branch/main"
 	local version_path="/usr/local/bin/.version"
@@ -220,6 +303,11 @@ show_help() {
 	echo "  proxmox <node...>            Gather from specific nodes (looks up IP from config)"
 	echo "  proxmox --add <name> [ip]    Register a node"
 	echo ""
+	echo "  git --init [remote_url]      Init git repo in cache dir"
+	echo "  git --push [\"message\"]        Commit and push all changes"
+	echo "  git --log [file]             Show commit history"
+	echo "  git --restore <file> [commit] Preview and restore a file from history"
+	echo ""
 	echo "  --update                     Update fk and fkg to the latest version"
 	echo "  --help                       Show this help message"
 	echo ""
@@ -232,11 +320,14 @@ show_help() {
 	echo "Config: ~/.fkg_nodes — one entry per line: <name> [ip]"
 }
 
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 case "$1" in
 proxmox) gather_proxmox "$@" ;;
+git)     git_cmd "$@" ;;
 --update) update ;;
 --help) show_help ;;
 *)
 	show_help
 	;;
 esac
+fi

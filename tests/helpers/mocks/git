@@ -1,0 +1,15 @@
+#!/bin/bash
+echo "$*" >> "${MOCK_GIT_CALLS_FILE:-/dev/null}"
+case "$*" in
+    *"diff --cached --quiet"*)
+        exit "${MOCK_GIT_DIFF_EXIT:-1}"
+        ;;
+    *"show"*)
+        echo "${MOCK_GIT_SHOW_OUTPUT:-file content}"
+        exit "${MOCK_GIT_SHOW_EXIT:-0}"
+        ;;
+    *"init"*|*"remote"*|*"add"*|*"commit"*|*"push"*|*"log"*|*"checkout"*)
+        exit 0
+        ;;
+esac
+exit 0

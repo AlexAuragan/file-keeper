@@ -1,0 +1,17 @@
+#!/bin/bash
+output_file=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -o) shift; output_file="$1" ;;
+        -sSL|--silent|--show-error|--location) ;;
+        *) ;;
+    esac
+    shift
+done
+content="${MOCK_CURL_OUTPUT:-0.2.0}"
+if [[ -n "$output_file" ]]; then
+    echo "$content" > "$output_file"
+else
+    echo "$content"
+fi
+exit "${MOCK_CURL_EXIT:-0}"

@@ -1,0 +1,4 @@
+#!/bin/bash
+echo "$*" >> "${MOCK_SSH_CALLS_FILE:-/dev/null}"
+echo "${MOCK_SSH_OUTPUT:-}"
+exit "${MOCK_SSH_EXIT:-0}"
