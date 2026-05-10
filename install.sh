@@ -1,8 +1,8 @@
 #!/bin/bash
 
-RAW_URL="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main/fk"
-FG_RAW_URL="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main/fkg"
-VERSION_URL="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main/.version"
+RAW_URL="https://forgejo.auragan.fr/AlexAuragan/file-keeper/raw/branch/main/fk"
+FG_RAW_URL="https://forgejo.auragan.fr/AlexAuragan/file-keeper/raw/branch/main/fkg"
+VERSION_URL="https://forgejo.auragan.fr/AlexAuragan/file-keeper/raw/branch/main/.version"
 INSTALL_PATH="/usr/local/bin/fk"
 FG_INSTALL_PATH="/usr/local/bin/fkg"
 VERSION_INSTALL_PATH="/usr/local/bin/.version"

@@ -75,9 +75,9 @@ gather_node() {
 				fi
 			else
 				if [ "$status" = "running" ]; then
-					ssh "$node" "pct exec $ctid -- cat $path" >"$dest_file" 2>/dev/null && ok=true
+					ssh -n "$node" "pct exec $ctid -- cat $path" >"$dest_file" 2>/dev/null && ok=true
 				else
-					ssh "$node" "cat $lxc_base/$ctid/rootfs$path" >"$dest_file" 2>/dev/null && ok=true
+					ssh -n "$node" "cat $lxc_base/$ctid/rootfs$path" >"$dest_file" 2>/dev/null && ok=true
 				fi
 			fi
 
@@ -118,7 +118,7 @@ gather_proxmox() {
 }
 
 update() {
-	local base_url="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main"
+	local base_url="https://forgejo.auragan.fr/AlexAuragan/file-keeper/raw/branch/main"
 	local version_path="/usr/local/bin/.version"
 
 	local remote_version

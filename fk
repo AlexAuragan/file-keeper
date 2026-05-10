@@ -342,7 +342,7 @@ uninstall() {
 }
 
 update() {
-	local base_url="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main"
+	local base_url="https://forgejo.auragan.fr/AlexAuragan/file-keeper/raw/branch/main"
 	local version_path="/usr/local/bin/.version"
 
 	local remote_version
