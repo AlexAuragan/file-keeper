@@ -3,7 +3,8 @@
 NODES_FILE="$HOME/.fkg_nodes"
 
 gather_node() {
-	local node="$1"
+	local node="$1"          # display name, used for folder and local check
+	local target="${2:-$1}"  # SSH target (IP or hostname)
 	local cache_dir="/cache/file_keeper/$node"
 	local lxc_base="/var/lib/lxc"
 	local is_local=false
@@ -19,7 +20,7 @@ gather_node() {
 		fi
 		ct_ids=$(pct list 2>/dev/null | awk 'NR>1 {print $1}')
 	else
-		ct_ids=$(ssh "$node" "pct list 2>/dev/null | awk 'NR>1 {print \$1}'" 2>/dev/null)
+		ct_ids=$(ssh "$target" "pct list 2>/dev/null | awk 'NR>1 {print \$1}'" 2>/dev/null)
 	fi
 
 	if [ -z "$ct_ids" ]; then
@@ -34,7 +35,7 @@ gather_node() {
 		if $is_local; then
 			status=$(pct status "$ctid" 2>/dev/null | awk '{print $2}')
 		else
-			status=$(ssh "$node" "pct status $ctid 2>/dev/null | awk '{print \$2}'" 2>/dev/null)
+			status=$(ssh "$target" "pct status $ctid 2>/dev/null | awk '{print \$2}'" 2>/dev/null)
 		fi
 
 		local ct_db_content=""
@@ -47,9 +48,9 @@ gather_node() {
 			fi
 		else
 			if [ "$status" = "running" ]; then
-				ct_db_content=$(ssh "$node" "pct exec $ctid -- cat /root/.file_keeper 2>/dev/null" 2>/dev/null)
+				ct_db_content=$(ssh "$target" "pct exec $ctid -- cat /root/.file_keeper 2>/dev/null" 2>/dev/null)
 			else
-				ct_db_content=$(ssh "$node" "cat $lxc_base/$ctid/rootfs/root/.file_keeper 2>/dev/null" 2>/dev/null)
+				ct_db_content=$(ssh "$target" "cat $lxc_base/$ctid/rootfs/root/.file_keeper 2>/dev/null" 2>/dev/null)
 			fi
 		fi
 
@@ -75,9 +76,9 @@ gather_node() {
 				fi
 			else
 				if [ "$status" = "running" ]; then
-					ssh -n "$node" "pct exec $ctid -- cat $path" >"$dest_file" 2>/dev/null && ok=true
+					ssh -n "$target" "pct exec $ctid -- cat $path" >"$dest_file" 2>/dev/null && ok=true
 				else
-					ssh -n "$node" "cat $lxc_base/$ctid/rootfs$path" >"$dest_file" 2>/dev/null && ok=true
+					ssh -n "$target" "cat $lxc_base/$ctid/rootfs$path" >"$dest_file" 2>/dev/null && ok=true
 				fi
 			fi
 
@@ -91,29 +92,75 @@ gather_node() {
 	done
 }
 
+lookup_target() {
+	local name="$1"
+	local ip
+	ip=$(grep -m1 "^$name " "$NODES_FILE" 2>/dev/null | awk '{print $2}')
+	echo "${ip:-$name}"
+}
+
+nodes_add() {
+	local name="$1"
+	local ip="$2"
+
+	if [ -z "$name" ]; then
+		echo "Usage: fkg proxmox --add <name> [ip]"
+		return 1
+	fi
+
+	if grep -qE "^$name( |$)" "$NODES_FILE" 2>/dev/null; then
+		echo "Node already exists: $name"
+		return 1
+	fi
+
+	touch "$NODES_FILE"
+	if [ -n "$ip" ]; then
+		echo "$name $ip" >>"$NODES_FILE"
+		echo "Added: $name ($ip)"
+	else
+		echo "$name" >>"$NODES_FILE"
+		echo "Added: $name"
+	fi
+}
+
 gather_proxmox() {
 	shift  # remove 'proxmox' from args
-	local nodes=()
+
+	if [ "$1" = "--add" ]; then
+		shift
+		nodes_add "$@"
+		return
+	fi
+
+	local names=()
+	local targets=()
 
 	if [ $# -gt 0 ]; then
-		nodes=("$@")
+		for name in "$@"; do
+			names+=("$name")
+			targets+=("$(lookup_target "$name")")
+		done
 	elif [ -f "$NODES_FILE" ]; then
 		while IFS= read -r line; do
 			[[ -z "$line" || "$line" == \#* ]] && continue
-			nodes+=("$line")
+			local name="${line%% *}"
+			local ip="${line#* }"
+			[ "$ip" = "$name" ] && ip=""
+			names+=("$name")
+			targets+=("${ip:-$name}")
 		done <"$NODES_FILE"
-		if [ ${#nodes[@]} -eq 0 ]; then
+		if [ ${#names[@]} -eq 0 ]; then
 			echo "No nodes found in $NODES_FILE."
 			return 1
 		fi
 	else
 		echo "No nodes specified and $NODES_FILE not found."
-		echo "Create $NODES_FILE with one node per line, or pass node names as arguments."
+		echo "Add a node with: fkg proxmox --add <name> [ip]"
 		return 1
 	fi
 
-	for node in "${nodes[@]}"; do
-		gather_node "$node"
+	for i in "${!names[@]}"; do
+		gather_node "${names[$i]}" "${targets[$i]}"
 	done
 }
 
@@ -169,19 +216,20 @@ show_help() {
 	echo ""
 	echo "Usage: fkg <command> [args]"
 	echo ""
-	echo "  proxmox              Gather from all nodes listed in ~/.fkg_nodes"
-	echo "  proxmox <node...>    Gather from specific nodes"
+	echo "  proxmox                      Gather from all nodes in ~/.fkg_nodes"
+	echo "  proxmox <node...>            Gather from specific nodes (looks up IP from config)"
+	echo "  proxmox --add <name> [ip]    Register a node"
 	echo ""
-	echo "  --update             Update fk and fkg to the latest version"
-	echo "  --help               Show this help message"
+	echo "  --update                     Update fk and fkg to the latest version"
+	echo "  --help                       Show this help message"
 	echo ""
 	echo "Node resolution:"
 	echo "  Nodes matching \$(hostname) are gathered locally via pct."
-	echo "  All other nodes are reached via SSH."
+	echo "  All other nodes are reached via SSH using their configured IP."
 	echo ""
 	echo "Output: /cache/file_keeper/<node>/CT<id>/<path>"
 	echo ""
-	echo "Config: ~/.fkg_nodes — one node hostname per line, # for comments"
+	echo "Config: ~/.fkg_nodes — one entry per line: <name> [ip]"
 }
 
 case "$1" in
