@@ -1,8 +1,10 @@
 #!/bin/bash
 
 RAW_URL="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main/fk"
+FG_RAW_URL="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main/fg"
 VERSION_URL="https://raw.githubusercontent.com/AlexAuragan/file-keeper/main/.version"
 INSTALL_PATH="/usr/local/bin/fk"
+FG_INSTALL_PATH="/usr/local/bin/fg"
 VERSION_INSTALL_PATH="/usr/local/bin/.version"
 
 setup_shell_integration() {
@@ -71,20 +73,26 @@ fi
 TMP=$(mktemp)
 curl -sSL "$RAW_URL" -o "$TMP" || { echo "Failed to download fk."; rm -f "$TMP" "$TMP_VERSION"; exit 1; }
 
-chmod +x "$TMP"
+TMP_FG=$(mktemp)
+curl -sSL "$FG_RAW_URL" -o "$TMP_FG" || { echo "Failed to download fg."; rm -f "$TMP" "$TMP_FG" "$TMP_VERSION"; exit 1; }
+
+chmod +x "$TMP" "$TMP_FG"
 if [ ! -w "$(dirname "$INSTALL_PATH")" ]; then
   if command -v sudo > /dev/null 2>&1; then
     sudo mv "$TMP" "$INSTALL_PATH"
+    sudo mv "$TMP_FG" "$FG_INSTALL_PATH"
     sudo mv "$TMP_VERSION" "$VERSION_INSTALL_PATH"
   else
     echo "Error: cannot write to $(dirname "$INSTALL_PATH") and sudo is not available."
-    rm -f "$TMP" "$TMP_VERSION"
+    rm -f "$TMP" "$TMP_FG" "$TMP_VERSION"
     exit 1
   fi
 else
   mv "$TMP" "$INSTALL_PATH"
+  mv "$TMP_FG" "$FG_INSTALL_PATH"
   mv "$TMP_VERSION" "$VERSION_INSTALL_PATH"
 fi
 
 echo "Done. fk ${REMOTE_VERSION} installed to $INSTALL_PATH"
+echo "Done. fg ${REMOTE_VERSION} installed to $FG_INSTALL_PATH"
 setup_shell_integration

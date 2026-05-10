@@ -1,0 +1,133 @@
+#!/bin/bash
+
+gather_node_local() {
+	local cache_dir="/cache/file_keeper"
+	local lxc_base="/var/lib/lxc"
+
+	if ! command -v pct &>/dev/null; then
+		echo "Error: pct not found. This command must run on a Proxmox host."
+		return 1
+	fi
+
+	local ct_ids
+	ct_ids=$(pct list 2>/dev/null | awk 'NR>1 {print $1}')
+
+	if [ -z "$ct_ids" ]; then
+		echo "No containers found."
+		return 1
+	fi
+
+	for ctid in $ct_ids; do
+		echo "CT $ctid:"
+
+		local status
+		status=$(pct status "$ctid" 2>/dev/null | awk '{print $2}')
+
+		local ct_db_content=""
+
+		if [ "$status" = "running" ]; then
+			ct_db_content=$(pct exec "$ctid" -- cat /root/.file_keeper 2>/dev/null)
+		else
+			local rootfs="$lxc_base/$ctid/rootfs"
+			local ct_db="$rootfs/root/.file_keeper"
+			[ -f "$ct_db" ] && ct_db_content=$(cat "$ct_db")
+		fi
+
+		if [ -z "$ct_db_content" ]; then
+			echo "  skipped (fk not installed or no files tracked)"
+			continue
+		fi
+
+		local dest="$cache_dir/CT$ctid"
+
+		while IFS= read -r line; do
+			local path="${line%%|*}"
+			[ -z "$path" ] && continue
+			local dest_file="$dest$path"
+			mkdir -p "$(dirname "$dest_file")"
+			if pct exec "$ctid" -- cat "$path" >"$dest_file" 2>/dev/null; then
+				echo "  $path"
+			else
+				rm -f "$dest_file"
+				echo "  $path (failed)"
+			fi
+		done <<<"$ct_db_content"
+	done
+}
+
+gather_node_remote() {
+	local node="$1"
+	local cache_dir="/cache/file_keeper/$node"
+	local lxc_base="/var/lib/lxc"
+
+	local ct_ids
+	ct_ids=$(ssh "$node" "pct list 2>/dev/null | awk 'NR>1 {print \$1}'" 2>/dev/null)
+
+	if [ -z "$ct_ids" ]; then
+		echo "No containers found on $node (or SSH failed)."
+		return 1
+	fi
+
+	for ctid in $ct_ids; do
+		echo "CT $ctid:"
+
+		local status
+		status=$(ssh "$node" "pct status $ctid 2>/dev/null | awk '{print \$2}'" 2>/dev/null)
+
+		local ct_db_content=""
+
+		if [ "$status" = "running" ]; then
+			ct_db_content=$(ssh "$node" "pct exec $ctid -- cat /root/.file_keeper 2>/dev/null" 2>/dev/null)
+		else
+			ct_db_content=$(ssh "$node" "cat $lxc_base/$ctid/rootfs/root/.file_keeper 2>/dev/null" 2>/dev/null)
+		fi
+
+		if [ -z "$ct_db_content" ]; then
+			echo "  skipped (fk not installed or no files tracked)"
+			continue
+		fi
+
+		local dest="$cache_dir/CT$ctid"
+
+		while IFS= read -r line; do
+			local path="${line%%|*}"
+			[ -z "$path" ] && continue
+			local dest_file="$dest$path"
+			mkdir -p "$(dirname "$dest_file")"
+			if [ "$status" = "running" ]; then
+				ssh "$node" "pct exec $ctid -- cat $path" >"$dest_file" 2>/dev/null
+			else
+				ssh "$node" "cat $lxc_base/$ctid/rootfs$path" >"$dest_file" 2>/dev/null
+			fi
+			if [ -s "$dest_file" ]; then
+				echo "  $path"
+			else
+				rm -f "$dest_file"
+				echo "  $path (failed)"
+			fi
+		done <<<"$ct_db_content"
+	done
+}
+
+gather_proxmox() {
+	shift  # remove 'proxmox' from args
+	if [ $# -eq 0 ]; then
+		gather_node_local
+	else
+		for node in "$@"; do
+			echo "=== $node ==="
+			gather_node_remote "$node"
+		done
+	fi
+}
+
+case "$1" in
+proxmox) gather_proxmox "$@" ;;
+*)
+	echo "Usage: fg <command> [args]"
+	echo ""
+	echo "Commands:"
+	echo "  proxmox              Gather from the local Proxmox node"
+	echo "  proxmox <node...>    Gather from one or more remote Proxmox nodes via SSH"
+	;;
+esac

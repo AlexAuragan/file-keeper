@@ -264,61 +264,6 @@ list_paths() {
 	done <"$DB"
 }
 
-gather_proxmox() {
-	local cache_dir="/cache/file_keeper"
-	local lxc_base="/var/lib/lxc"
-
-	if ! command -v pct &>/dev/null; then
-		echo "Error: pct not found. This command must run on a Proxmox host."
-		return 1
-	fi
-
-	local ct_ids
-	ct_ids=$(pct list 2>/dev/null | awk 'NR>1 {print $1}')
-
-	if [ -z "$ct_ids" ]; then
-		echo "No containers found."
-		return 1
-	fi
-
-	for ctid in $ct_ids; do
-		echo "CT $ctid:"
-
-		local status
-		status=$(pct status "$ctid" 2>/dev/null | awk '{print $2}')
-
-		local ct_db_content=""
-
-		if [ "$status" = "running" ]; then
-			ct_db_content=$(pct exec "$ctid" -- cat /root/.file_keeper 2>/dev/null)
-		else
-			# Fallback: direct rootfs access (works for dir storage)
-			local rootfs="$lxc_base/$ctid/rootfs"
-			local ct_db="$rootfs/root/.file_keeper"
-			[ -f "$ct_db" ] && ct_db_content=$(cat "$ct_db")
-		fi
-
-		if [ -z "$ct_db_content" ]; then
-			echo "  skipped (fk not installed or no files tracked)"
-			continue
-		fi
-
-		local dest="$cache_dir/CT$ctid"
-
-		while IFS= read -r line; do
-			local path="${line%%|*}"
-			[ -z "$path" ] && continue
-			local dest_file="$dest$path"
-			mkdir -p "$(dirname "$dest_file")"
-			if pct exec "$ctid" -- cat "$path" >"$dest_file" 2>/dev/null; then
-				echo "  $path"
-			else
-				rm -f "$dest_file"
-				echo "  $path (failed)"
-			fi
-		done <<<"$ct_db_content"
-	done
-}
 
 setup_shell_integration() {
 	local BASH_BLOCK='
@@ -383,14 +328,15 @@ uninstall() {
 		fi
 	done
 
-	local bin="/usr/local/bin/fk"
-	if [ -w "$(dirname "$bin")" ]; then
-		rm -f "$bin"
-	elif command -v sudo >/dev/null 2>&1; then
-		sudo rm -f "$bin"
-	else
-		echo "Warning: cannot remove $bin (no write permission and sudo unavailable)."
-	fi
+	for bin in "/usr/local/bin/fk" "/usr/local/bin/fg"; do
+		if [ -w "$(dirname "$bin")" ]; then
+			rm -f "$bin"
+		elif command -v sudo >/dev/null 2>&1; then
+			sudo rm -f "$bin"
+		else
+			echo "Warning: cannot remove $bin (no write permission and sudo unavailable)."
+		fi
+	done
 
 	echo "fk has been uninstalled."
 }
@@ -411,7 +357,6 @@ case "$1" in
 --edit) edit_file ;;
 --delete) delete_file ;;
 --list-paths) list_paths ;;
---gather-proxmox) gather_proxmox ;;
 --setup-shell) setup_shell_integration ;;
 --uninstall) uninstall ;;
 --cat)
