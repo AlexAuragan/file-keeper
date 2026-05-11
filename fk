@@ -154,12 +154,19 @@ get_path_from_choice() {
 }
 
 edit_file() {
-	pick_file || return
-	[ -z "$SELECTED_PATH" ] && return
-	echo -n "Enter new description for '$SELECTED_PATH': "
+	local path
+	if [ -n "$1" ]; then
+		path="$1"
+		grep -q "^$path|" "$DB" 2>/dev/null || { echo "Not tracked: $path"; return 1; }
+	else
+		pick_file || return
+		[ -z "$SELECTED_PATH" ] && return
+		path="$SELECTED_PATH"
+	fi
+	echo -n "Enter new description for '$path': "
 	read -r new_desc
 
-	awk -F'|' -v file="$SELECTED_PATH" -v desc="$new_desc" '{
+	awk -F'|' -v file="$path" -v desc="$new_desc" '{
     if ($1 == file) {
       print file "|" desc
     } else {
@@ -167,7 +174,7 @@ edit_file() {
     }
   }' "$DB" >"$DB.tmp" && mv "$DB.tmp" "$DB"
 
-	echo "Updated description for $SELECTED_PATH"
+	echo "Updated description for $path"
 }
 
 delete_file() {
@@ -444,7 +451,7 @@ case "$1" in
 	shift
 	add_file "$@"
 	;;
---edit) edit_file ;;
+--edit) shift; edit_file "$1" ;;
 --delete) shift; delete_file "$1" ;;
 --list-paths) list_paths ;;
 --update) update ;;
