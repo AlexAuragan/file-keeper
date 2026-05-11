@@ -171,6 +171,13 @@ edit_file() {
 }
 
 delete_file() {
+	if [ -n "$1" ]; then
+		local path="$1"
+		grep -q "^$path|" "$DB" 2>/dev/null || { echo "Not tracked: $path"; return 1; }
+		grep -v "^$path|" "$DB" >"$DB.tmp" && mv "$DB.tmp" "$DB"
+		echo "Deleted $path from tracking"
+		return
+	fi
 	pick_file || return
 	[ -z "$SELECTED_PATH" ] && return
 	grep -v "^$SELECTED_PATH|" "$DB" >"$DB.tmp" && mv "$DB.tmp" "$DB"
@@ -438,7 +445,7 @@ case "$1" in
 	add_file "$@"
 	;;
 --edit) edit_file ;;
---delete) delete_file ;;
+--delete) shift; delete_file "$1" ;;
 --list-paths) list_paths ;;
 --update) update ;;
 --help) show_help ;;
