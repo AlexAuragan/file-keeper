@@ -45,6 +45,15 @@ add_file() {
 		return
 	fi
 
+	# Resolve to absolute path
+	local abs_file
+	abs_file=$(realpath "$file" 2>/dev/null)
+	if [ -z "$abs_file" ] || [ ! -f "$abs_file" ]; then
+		echo "File not found: $file"
+		return 1
+	fi
+	file="$abs_file"
+
 	grep -q "^$file|" "$DB" 2>/dev/null && {
 		echo "File already tracked: $file"
 		return
@@ -108,6 +117,7 @@ show_getting_started() {
 }
 
 pick_file() {
+	local header="${1:-}"
 	config_files=()
 	service_files=()
 	build_lists || {
@@ -115,8 +125,13 @@ pick_file() {
 		return 1
 	}
 
+	[ -n "$header" ] && echo "$header"
 	print_lists
-	echo -n "Select (e.g., 1, ar, ai, aj): "
+	if [ -n "$header" ]; then
+		echo -n "Select (e.g., 1, a, b): "
+	else
+		echo -n "Select (e.g., 1, ar, ai, aj): "
+	fi
 	read -r SELECTED_CHOICE || return 1
 	SELECTED_PATH=$(get_path_from_choice "$SELECTED_CHOICE" config_files[@] service_files[@])
 }
@@ -185,7 +200,7 @@ delete_file() {
 		echo "Deleted $path from tracking"
 		return
 	fi
-	pick_file || return
+	pick_file "Deletion mode — select a file to remove from tracking:" || return
 	[ -z "$SELECTED_PATH" ] && return
 	grep -v "^$SELECTED_PATH|" "$DB" >"$DB.tmp" && mv "$DB.tmp" "$DB"
 	echo "Deleted $SELECTED_PATH from tracking"
