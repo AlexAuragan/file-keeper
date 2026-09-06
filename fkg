@@ -4,330 +4,473 @@ NODES_FILE="${FK_NODES_FILE:-$HOME/.fkg_nodes}"
 CACHE_DIR="${FK_CACHE_DIR:-/cache/file_keeper}"
 
 gather_node() {
-	local node="$1"          # display name, used for folder and local check
-	local target="${2:-$1}"  # SSH target (IP or hostname)
-	local cache_dir="$CACHE_DIR/$node"
-	local lxc_base="/var/lib/lxc"
-	local is_local=false
-	[ "$node" = "$(hostname)" ] && is_local=true
+  local node="$1"         # display name, used for folder and local check
+  local target="${2:-$1}" # SSH target (IP or hostname)
+  local cache_dir="$CACHE_DIR/$node"
+  local lxc_base="/var/lib/lxc"
+  local is_local=false
+  [ "$node" = "$(hostname)" ] && is_local=true
 
-	echo "=== $node ==="
+  echo "=== $node ==="
 
-	local ct_ids
-	if $is_local; then
-		if ! command -v pct &>/dev/null; then
-			echo "  Error: pct not found. This command must run on a Proxmox host."
-			return 1
-		fi
-		ct_ids=$(pct list 2>/dev/null | awk 'NR>1 {print $1}')
-	else
-		ct_ids=$(ssh "$target" "pct list 2>/dev/null | awk 'NR>1 {print \$1}'" 2>/dev/null)
-	fi
+  local ct_ids
+  if $is_local; then
+    if ! command -v pct &>/dev/null; then
+      echo "  Error: pct not found. This command must run on a Proxmox host."
+      return 1
+    fi
+    ct_ids=$(pct list 2>/dev/null | awk 'NR>1 {print $1}')
+  else
+    ct_ids=$(ssh "$target" "pct list 2>/dev/null | awk 'NR>1 {print \$1}'" 2>/dev/null)
+  fi
 
-	if [ -z "$ct_ids" ]; then
-		echo "  No containers found."
-		return 1
-	fi
+  if [ -z "$ct_ids" ]; then
+    echo "  No containers found."
+    return 1
+  fi
 
-	for ctid in $ct_ids; do
-		echo "  CT $ctid:"
+  for ctid in $ct_ids; do
+    echo "  CT $ctid:"
 
-		local status
-		if $is_local; then
-			status=$(pct status "$ctid" 2>/dev/null | awk '{print $2}')
-		else
-			status=$(ssh "$target" "pct status $ctid 2>/dev/null | awk '{print \$2}'" 2>/dev/null)
-		fi
+    local status
+    if $is_local; then
+      status=$(pct status "$ctid" 2>/dev/null | awk '{print $2}')
+    else
+      status=$(ssh "$target" "pct status $ctid 2>/dev/null | awk '{print \$2}'" 2>/dev/null)
+    fi
 
-		local ct_db_content=""
-		if $is_local; then
-			if [ "$status" = "running" ]; then
-				ct_db_content=$(pct exec "$ctid" -- cat /root/.file_keeper 2>/dev/null)
-			else
-				local ct_db="$lxc_base/$ctid/rootfs/root/.file_keeper"
-				[ -f "$ct_db" ] && ct_db_content=$(cat "$ct_db")
-			fi
-		else
-			if [ "$status" = "running" ]; then
-				ct_db_content=$(ssh "$target" "pct exec $ctid -- cat /root/.file_keeper 2>/dev/null" 2>/dev/null)
-			else
-				ct_db_content=$(ssh "$target" "cat $lxc_base/$ctid/rootfs/root/.file_keeper 2>/dev/null" 2>/dev/null)
-			fi
-		fi
+    local ct_db_content=""
+    if $is_local; then
+      if [ "$status" = "running" ]; then
+        ct_db_content=$(pct exec "$ctid" -- cat /root/.file_keeper 2>/dev/null)
+      else
+        local ct_db="$lxc_base/$ctid/rootfs/root/.file_keeper"
+        [ -f "$ct_db" ] && ct_db_content=$(cat "$ct_db")
+      fi
+    else
+      if [ "$status" = "running" ]; then
+        ct_db_content=$(ssh "$target" "pct exec $ctid -- cat /root/.file_keeper 2>/dev/null" 2>/dev/null)
+      else
+        ct_db_content=$(ssh "$target" "cat $lxc_base/$ctid/rootfs/root/.file_keeper 2>/dev/null" 2>/dev/null)
+      fi
+    fi
 
-		if [ -z "$ct_db_content" ]; then
-			echo "    skipped (fk not installed or no files tracked)"
-			continue
-		fi
+    if [ -z "$ct_db_content" ]; then
+      echo "    skipped (fk not installed or no files tracked)"
+      continue
+    fi
 
-		local dest="$cache_dir/CT$ctid"
+    local dest="$cache_dir/CT$ctid"
 
-		while IFS= read -r line; do
-			local path="${line%%|*}"
-			[ -z "$path" ] && continue
-			local dest_file="$dest$path"
-			mkdir -p "$(dirname "$dest_file")"
+    while IFS= read -r line; do
+      local path="${line%%|*}"
+      [ -z "$path" ] && continue
+      local dest_file="$dest$path"
+      mkdir -p "$(dirname "$dest_file")"
 
-			local ok=false
-			if $is_local; then
-				if [ "$status" = "running" ]; then
-					pct exec "$ctid" -- cat "$path" >"$dest_file" 2>/dev/null && ok=true
-				else
-					cp "$lxc_base/$ctid/rootfs$path" "$dest_file" 2>/dev/null && ok=true
-				fi
-			else
-				if [ "$status" = "running" ]; then
-					ssh -n "$target" "pct exec $ctid -- cat $path" >"$dest_file" 2>/dev/null && ok=true
-				else
-					ssh -n "$target" "cat $lxc_base/$ctid/rootfs$path" >"$dest_file" 2>/dev/null && ok=true
-				fi
-			fi
+      local ok=false
+      if $is_local; then
+        if [ "$status" = "running" ]; then
+          pct exec "$ctid" -- cat "$path" >"$dest_file" 2>/dev/null && ok=true
+        else
+          cp "$lxc_base/$ctid/rootfs$path" "$dest_file" 2>/dev/null && ok=true
+        fi
+      else
+        if [ "$status" = "running" ]; then
+          ssh -n "$target" "pct exec $ctid -- cat $path" >"$dest_file" 2>/dev/null && ok=true
+        else
+          ssh -n "$target" "cat $lxc_base/$ctid/rootfs$path" >"$dest_file" 2>/dev/null && ok=true
+        fi
+      fi
 
-			if $ok && [ -s "$dest_file" ]; then
-				echo "    $path"
-			else
-				rm -f "$dest_file"
-				echo "    $path (failed)"
-			fi
-		done <<<"$ct_db_content"
-	done
+      if $ok && [ -s "$dest_file" ]; then
+        echo "    $path"
+      else
+        rm -f "$dest_file"
+        echo "    $path (failed)"
+      fi
+    done <<<"$ct_db_content"
+  done
 }
 
 lookup_target() {
-	local name="$1"
-	local ip
-	ip=$(grep -m1 "^$name " "$NODES_FILE" 2>/dev/null | awk '{print $2}')
-	echo "${ip:-$name}"
+  local name="$1"
+  local ip
+  ip=$(grep -m1 "^$name " "$NODES_FILE" 2>/dev/null | awk '{print $2}')
+  echo "${ip:-$name}"
 }
 
 nodes_add() {
-	local name="$1"
-	local ip="$2"
+  local name="$1"
+  local ip="$2"
 
-	if [ -z "$name" ]; then
-		echo "Usage: fkg proxmox --add <name> [ip]"
-		return 1
-	fi
+  if [ -z "$name" ]; then
+    echo "Usage: fkg proxmox --add <name> [ip]"
+    return 1
+  fi
 
-	if grep -qE "^$name( |$)" "$NODES_FILE" 2>/dev/null; then
-		echo "Node already exists: $name"
-		return 1
-	fi
+  if grep -qE "^$name( |$)" "$NODES_FILE" 2>/dev/null; then
+    echo "Node already exists: $name"
+    return 1
+  fi
 
-	touch "$NODES_FILE"
-	if [ -n "$ip" ]; then
-		echo "$name $ip" >>"$NODES_FILE"
-		echo "Added: $name ($ip)"
-	else
-		echo "$name" >>"$NODES_FILE"
-		echo "Added: $name"
-	fi
+  touch "$NODES_FILE"
+  if [ -n "$ip" ]; then
+    echo "$name $ip" >>"$NODES_FILE"
+    echo "Added: $name ($ip)"
+  else
+    echo "$name" >>"$NODES_FILE"
+    echo "Added: $name"
+  fi
 }
 
 gather_proxmox() {
-	shift  # remove 'proxmox' from args
+  shift # remove 'proxmox' from args
 
-	if [ "$1" = "--add" ]; then
-		shift
-		nodes_add "$@"
-		return
-	fi
+  if [ "$1" = "--add" ]; then
+    shift
+    nodes_add "$@"
+    return
+  fi
 
-	local names=()
-	local targets=()
+  local names=()
+  local targets=()
 
-	if [ $# -gt 0 ]; then
-		for name in "$@"; do
-			names+=("$name")
-			targets+=("$(lookup_target "$name")")
-		done
-	elif [ -f "$NODES_FILE" ]; then
-		while IFS= read -r line; do
-			[[ -z "$line" || "$line" == \#* ]] && continue
-			local name="${line%% *}"
-			local ip="${line#* }"
-			[ "$ip" = "$name" ] && ip=""
-			names+=("$name")
-			targets+=("${ip:-$name}")
-		done <"$NODES_FILE"
-		if [ ${#names[@]} -eq 0 ]; then
-			echo "No nodes found in $NODES_FILE."
-			return 1
-		fi
-	else
-		echo "No nodes specified and $NODES_FILE not found."
-		echo "Add a node with: fkg proxmox --add <name> [ip]"
-		return 1
-	fi
+  if [ $# -gt 0 ]; then
+    for name in "$@"; do
+      names+=("$name")
+      targets+=("$(lookup_target "$name")")
+    done
+  elif [ -f "$NODES_FILE" ]; then
+    while IFS= read -r line; do
+      [[ -z "$line" || "$line" == \#* ]] && continue
+      local name="${line%% *}"
+      local ip="${line#* }"
+      [ "$ip" = "$name" ] && ip=""
+      names+=("$name")
+      targets+=("${ip:-$name}")
+    done <"$NODES_FILE"
+    if [ ${#names[@]} -eq 0 ]; then
+      echo "No nodes found in $NODES_FILE."
+      return 1
+    fi
+  else
+    echo "No nodes specified and $NODES_FILE not found."
+    echo "Add a node with: fkg proxmox --add <name> [ip]"
+    return 1
+  fi
 
-	for i in "${!names[@]}"; do
-		gather_node "${names[$i]}" "${targets[$i]}"
-	done
+  for i in "${!names[@]}"; do
+    gather_node "${names[$i]}" "${targets[$i]}"
+  done
 }
 
 git_init() {
-	local remote="$1"
-	if [ ! -d "$CACHE_DIR" ]; then
-		mkdir -p "$CACHE_DIR"
-	fi
-	if [ -d "$CACHE_DIR/.git" ]; then
-		echo "Git already initialized in $CACHE_DIR."
-	else
-		git -C "$CACHE_DIR" init
-	fi
-	if [ -n "$remote" ]; then
-		git -C "$CACHE_DIR" remote add origin "$remote" 2>/dev/null || \
-			git -C "$CACHE_DIR" remote set-url origin "$remote"
-		echo "Remote set to: $remote"
-	fi
+  local remote="$1"
+  if [ ! -d "$CACHE_DIR" ]; then
+    mkdir -p "$CACHE_DIR"
+  fi
+  if [ -d "$CACHE_DIR/.git" ]; then
+    echo "Git already initialized in $CACHE_DIR."
+  else
+    git -C "$CACHE_DIR" init
+  fi
+  if [ -n "$remote" ]; then
+    git -C "$CACHE_DIR" remote add origin "$remote" 2>/dev/null ||
+      git -C "$CACHE_DIR" remote set-url origin "$remote"
+    echo "Remote set to: $remote"
+  fi
 }
 
 git_push() {
-	local message="${1:-$(date '+%Y-%m-%d %H:%M:%S')}"
-	if [ ! -d "$CACHE_DIR/.git" ]; then
-		echo "Git not initialized. Run: fkg git --init [remote_url]"
-		return 1
-	fi
-	git -C "$CACHE_DIR" add -A
-	if git -C "$CACHE_DIR" diff --cached --quiet; then
-		echo "Nothing to commit."
-		return 0
-	fi
-	git -C "$CACHE_DIR" commit -m "$message"
-	git -C "$CACHE_DIR" push
+  local message="${1:-$(date '+%Y-%m-%d %H:%M:%S')}"
+  if [ ! -d "$CACHE_DIR/.git" ]; then
+    echo "Git not initialized. Run: fkg git --init [remote_url]"
+    return 1
+  fi
+  git -C "$CACHE_DIR" add -A
+  if git -C "$CACHE_DIR" diff --cached --quiet; then
+    echo "Nothing to commit."
+    return 0
+  fi
+  git -C "$CACHE_DIR" commit -m "$message"
+  git -C "$CACHE_DIR" push
 }
 
 git_log() {
-	if [ ! -d "$CACHE_DIR/.git" ]; then
-		echo "Git not initialized. Run: fkg git --init [remote_url]"
-		return 1
-	fi
-	git -C "$CACHE_DIR" log --oneline "$@"
+  if [ ! -d "$CACHE_DIR/.git" ]; then
+    echo "Git not initialized. Run: fkg git --init [remote_url]"
+    return 1
+  fi
+  git -C "$CACHE_DIR" log --oneline "$@"
 }
 
 git_restore() {
-	local file="$1"
-	local commit="${2:-HEAD}"
-	if [ ! -d "$CACHE_DIR/.git" ]; then
-		echo "Git not initialized. Run: fkg git --init [remote_url]"
-		return 1
-	fi
-	if [ -z "$file" ]; then
-		echo "Usage: fkg git --restore <file> [commit]"
-		return 1
-	fi
-	echo "--- $file @ $commit ---"
-	git -C "$CACHE_DIR" show "$commit:$file" 2>/dev/null || {
-		echo "File not found at commit $commit."
-		return 1
-	}
-	echo ""
-	echo -n "Restore $file from $commit? [y/N] "
-	read -r confirm
-	[[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; return; }
-	git -C "$CACHE_DIR" checkout "$commit" -- "$file"
-	echo "Restored: $CACHE_DIR/$file"
+  local file="$1"
+  local commit="${2:-HEAD}"
+  local lxc_base="/var/lib/lxc"
+
+  if [ ! -d "$CACHE_DIR/.git" ]; then
+    echo "Git not initialized. Run: fkg git --init [remote_url]"
+    return 1
+  fi
+
+  if [ -z "$file" ]; then
+    echo "Usage: fkg git --restore <file> [commit]"
+    return 1
+  fi
+
+  # Expected path:
+  # <node>/CT<id>/<original/path>
+  if [[ ! "$file" =~ ^([^/]+)/CT([0-9]+)/(.*)$ ]]; then
+    echo "Invalid file path."
+    echo "Expected: <node>/CT<id>/<original/path>"
+    return 1
+  fi
+
+  local node="${BASH_REMATCH[1]}"
+  local ctid="${BASH_REMATCH[2]}"
+  local relative_path="${BASH_REMATCH[3]}"
+
+  if [ -z "$relative_path" ] || [[ "/$relative_path/" == *"/../"* ]]; then
+    echo "Invalid container path."
+    return 1
+  fi
+
+  local container_path="/$relative_path"
+  local cache_file="$CACHE_DIR/$file"
+
+  # Extract the historical version to a temporary file first.
+  local tmp
+  tmp=$(mktemp) || return 1
+
+  if ! git -C "$CACHE_DIR" show "$commit:$file" >"$tmp" 2>/dev/null; then
+    echo "File not found at commit $commit."
+    rm -f "$tmp"
+    return 1
+  fi
+
+  echo "--- $file @ $commit ---"
+  cat "$tmp"
+  echo ""
+  echo ""
+  echo "Target: $node / CT$ctid / $container_path"
+  echo -n "Restore this file to the container? [y/N] "
+  read -r confirm
+
+  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    echo "Aborted."
+    rm -f "$tmp"
+    return
+  fi
+
+  local target
+  target=$(lookup_target "$node")
+
+  local is_local=false
+  [ "$node" = "$(hostname)" ] && is_local=true
+
+  local status
+
+  if $is_local; then
+    if ! command -v pct &>/dev/null; then
+      echo "Error: pct not found."
+      rm -f "$tmp"
+      return 1
+    fi
+
+    status=$(pct status "$ctid" 2>/dev/null | awk '{print $2}')
+  else
+    status=$(ssh "$target" "pct status $ctid 2>/dev/null | awk '{print \$2}'" 2>/dev/null)
+  fi
+
+  if [ -z "$status" ]; then
+    echo "Could not determine status of CT$ctid on $node."
+    rm -f "$tmp"
+    return 1
+  fi
+
+  if $is_local; then
+    if [ "$status" = "running" ]; then
+      if ! pct exec "$ctid" -- sh -c 'cat > "$1"' sh "$container_path" <"$tmp"; then
+        echo "Failed to restore file to CT$ctid."
+        rm -f "$tmp"
+        return 1
+      fi
+    else
+      local dest="$lxc_base/$ctid/rootfs$container_path"
+
+      if [ ! -f "$dest" ]; then
+        echo "Target file does not exist in stopped CT$ctid."
+        echo "Start the container and retry so ownership can be created correctly."
+        rm -f "$tmp"
+        return 1
+      fi
+
+      if ! cat "$tmp" >"$dest"; then
+        echo "Failed to restore file to CT$ctid."
+        rm -f "$tmp"
+        return 1
+      fi
+    fi
+  else
+    if [ "$status" = "running" ]; then
+      local quoted_path
+      printf -v quoted_path '%q' "$container_path"
+
+      if ! ssh "$target" \
+        "pct exec $ctid -- sh -c 'cat > \"\$1\"' sh $quoted_path" <"$tmp"; then
+        echo "Failed to restore file to CT$ctid on $node."
+        rm -f "$tmp"
+        return 1
+      fi
+    else
+      local dest="$lxc_base/$ctid/rootfs$container_path"
+      local quoted_dest
+      printf -v quoted_dest '%q' "$dest"
+
+      if ! ssh "$target" "test -f $quoted_dest"; then
+        echo "Target file does not exist in stopped CT$ctid."
+        echo "Start the container and retry so ownership can be created correctly."
+        rm -f "$tmp"
+        return 1
+      fi
+
+      if ! ssh "$target" "cat > $quoted_dest" <"$tmp"; then
+        echo "Failed to restore file to CT$ctid on $node."
+        rm -f "$tmp"
+        return 1
+      fi
+    fi
+  fi
+
+  # Keep the gathered cache in sync with what was restored.
+  cp "$tmp" "$cache_file"
+  rm -f "$tmp"
+
+  echo "Restored:"
+  echo "  Cache:     $cache_file"
+  echo "  Container: $node / CT$ctid / $container_path"
 }
 
 git_cmd() {
-	shift  # remove 'git'
-	case "$1" in
-	--init)  shift; git_init "$@" ;;
-	--push)  shift; git_push "$@" ;;
-	--log)   shift; git_log "$@" ;;
-	--restore) shift; git_restore "$@" ;;
-	*)
-		echo "Usage: fkg git <option>"
-		echo ""
-		echo "  --init [remote_url]        Init git repo in $CACHE_DIR"
-		echo "  --push [\"message\"]          Commit and push all changes"
-		echo "  --log [file]               Show commit history"
-		echo "  --restore <file> [commit]  Preview and restore a file from history"
-		;;
-	esac
+  shift # remove 'git'
+  case "$1" in
+  --init)
+    shift
+    git_init "$@"
+    ;;
+  --push)
+    shift
+    git_push "$@"
+    ;;
+  --log)
+    shift
+    git_log "$@"
+    ;;
+  --restore)
+    shift
+    git_restore "$@"
+    ;;
+  *)
+    echo "Usage: fkg git <option>"
+    echo ""
+    echo "  --init [remote_url]        Init git repo in $CACHE_DIR"
+    echo "  --push [\"message\"]          Commit and push all changes"
+    echo "  --log [file]               Show commit history"
+    echo "  --restore <file> [commit]  Preview and restore a file from history"
+    ;;
+  esac
 }
 
 update() {
-	local base_url="https://forgejo.auragan.fr/AlexAuragan/file-keeper/raw/branch/main"
-	local version_path="/usr/local/bin/.version"
+  local base_url="https://forgejo.auragan.fr/AlexAuragan/file-keeper/raw/branch/main"
+  local version_path="/usr/local/bin/.version"
 
-	local remote_version
-	remote_version=$(curl -sSL "$base_url/.version") || { echo "Failed to fetch version info."; return 1; }
+  local remote_version
+  remote_version=$(curl -sSL "$base_url/.version") || {
+    echo "Failed to fetch version info."
+    return 1
+  }
 
-	local local_version
-	local_version=$(cat "$version_path" 2>/dev/null)
+  local local_version
+  local_version=$(cat "$version_path" 2>/dev/null)
 
-	if [ "$remote_version" = "$local_version" ]; then
-		echo "Already up to date ($remote_version)."
-		return 0
-	fi
+  if [ "$remote_version" = "$local_version" ]; then
+    echo "Already up to date ($remote_version)."
+    return 0
+  fi
 
-	echo "Updating $local_version -> $remote_version..."
+  echo "Updating $local_version -> $remote_version..."
 
-	for bin in fk fkg; do
-		local tmp
-		tmp=$(mktemp)
-		curl -sSL "$base_url/$bin" -o "$tmp" || { echo "Failed to download $bin."; rm -f "$tmp"; return 1; }
-		chmod +x "$tmp"
-		local dest="/usr/local/bin/$bin"
-		if [ -w "$(dirname "$dest")" ]; then
-			mv "$tmp" "$dest"
-		elif command -v sudo >/dev/null 2>&1; then
-			sudo mv "$tmp" "$dest"
-		else
-			echo "Error: cannot write to $(dirname "$dest") and sudo is unavailable."
-			rm -f "$tmp"
-			return 1
-		fi
-		echo "  $bin updated."
-	done
+  for bin in fk fkg; do
+    local tmp
+    tmp=$(mktemp)
+    curl -sSL "$base_url/$bin" -o "$tmp" || {
+      echo "Failed to download $bin."
+      rm -f "$tmp"
+      return 1
+    }
+    chmod +x "$tmp"
+    local dest="/usr/local/bin/$bin"
+    if [ -w "$(dirname "$dest")" ]; then
+      mv "$tmp" "$dest"
+    elif command -v sudo >/dev/null 2>&1; then
+      sudo mv "$tmp" "$dest"
+    else
+      echo "Error: cannot write to $(dirname "$dest") and sudo is unavailable."
+      rm -f "$tmp"
+      return 1
+    fi
+    echo "  $bin updated."
+  done
 
-	local tmp_ver
-	tmp_ver=$(mktemp)
-	echo "$remote_version" >"$tmp_ver"
-	if [ -w "$(dirname "$version_path")" ]; then
-		mv "$tmp_ver" "$version_path"
-	else
-		sudo mv "$tmp_ver" "$version_path"
-	fi
+  local tmp_ver
+  tmp_ver=$(mktemp)
+  echo "$remote_version" >"$tmp_ver"
+  if [ -w "$(dirname "$version_path")" ]; then
+    mv "$tmp_ver" "$version_path"
+  else
+    sudo mv "$tmp_ver" "$version_path"
+  fi
 
-	echo "Done. fk $remote_version installed."
+  echo "Done. fk $remote_version installed."
 }
 
 show_help() {
-	echo "fkg - file keeper gatherer"
-	echo ""
-	echo "Usage: fkg <command> [args]"
-	echo ""
-	echo "  proxmox                      Gather from all nodes in ~/.fkg_nodes"
-	echo "  proxmox <node...>            Gather from specific nodes (looks up IP from config)"
-	echo "  proxmox --add <name> [ip]    Register a node"
-	echo ""
-	echo "  git --init [remote_url]      Init git repo in cache dir"
-	echo "  git --push [\"message\"]        Commit and push all changes"
-	echo "  git --log [file]             Show commit history"
-	echo "  git --restore <file> [commit] Preview and restore a file from history"
-	echo ""
-	echo "  --update                     Update fk and fkg to the latest version"
-	echo "  --help                       Show this help message"
-	echo ""
-	echo "Node resolution:"
-	echo "  Nodes matching \$(hostname) are gathered locally via pct."
-	echo "  All other nodes are reached via SSH using their configured IP."
-	echo ""
-	echo "Output: /cache/file_keeper/<node>/CT<id>/<path>"
-	echo ""
-	echo "Config: ~/.fkg_nodes — one entry per line: <name> [ip]"
+  echo "fkg - file keeper gatherer"
+  echo ""
+  echo "Usage: fkg <command> [args]"
+  echo ""
+  echo "  proxmox                      Gather from all nodes in ~/.fkg_nodes"
+  echo "  proxmox <node...>            Gather from specific nodes (looks up IP from config)"
+  echo "  proxmox --add <name> [ip]    Register a node"
+  echo ""
+  echo "  git --init [remote_url]      Init git repo in cache dir"
+  echo "  git --push [\"message\"]        Commit and push all changes"
+  echo "  git --log [file]             Show commit history"
+  echo "  git --restore <file> [commit] Preview and restore a file from history"
+  echo ""
+  echo "  --update                     Update fk and fkg to the latest version"
+  echo "  --help                       Show this help message"
+  echo ""
+  echo "Node resolution:"
+  echo "  Nodes matching \$(hostname) are gathered locally via pct."
+  echo "  All other nodes are reached via SSH using their configured IP."
+  echo ""
+  echo "Output: /cache/file_keeper/<node>/CT<id>/<path>"
+  echo ""
+  echo "Config: ~/.fkg_nodes — one entry per line: <name> [ip]"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-case "$1" in
-proxmox) gather_proxmox "$@" ;;
-git)     git_cmd "$@" ;;
---update) update ;;
---help) show_help ;;
-*)
-	show_help
-	;;
-esac
+  case "$1" in
+  proxmox) gather_proxmox "$@" ;;
+  git) git_cmd "$@" ;;
+  --update) update ;;
+  --help) show_help ;;
+  *)
+    show_help
+    ;;
+  esac
 fi
